@@ -200,14 +200,3 @@ Catatan:
 3. Progress selesai tapi file tidak ada
 - Cek log error di console server.
 - Pastikan folder output tidak terhapus oleh cleanup process lain.
-
-## Lisensi
-
-Repo ini tampak untuk penggunaan internal perusahaan. Tambahkan lisensi resmi jika diperlukan.
-
-## Checklist Sebelum Publish ke GitHub
-
-1. Pastikan `.env` tidak ikut ter-stage (`git status`).
-2. Pastikan tidak ada credential/token/password hardcoded di source code.
-3. Commit hanya `.env.example` (template), bukan `.env`.
-4. Rotasi secret lama jika sebelumnya pernah terlanjur tercatat di riwayat git.
