@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Report Viewer</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .file-card {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .file-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    .file-card.selected {
+      border-color: #0d6efd !important;
+      background-color: #e7f1ff;
+    }
+    .file-icon {
+      font-size: 2rem;
+      color: #198754;
+    }
+    .checkbox-custom {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+    .action-bar {
+      position: sticky;
+      top: 70px;
+      z-index: 100;
+      background: white;
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .filter-tabs {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .filter-tab {
+      padding: 0.5rem 1rem;
+      border: 1px solid #dee2e6;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      line-height: 1.2;
+    }
+    .filter-tab:hover {
+      background: #f8f9fa;
+    }
+    .filter-tab.active {
+      background: #0d6efd;
+      color: white;
+      border-color: #0d6efd;
+    }
+    .see-all-btn {
+      background: white;
+      border: 1px solid #dee2e6;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+    .see-all-btn:hover {
+      background: #f8f9fa;
+    }
+    .modal-content {
+      margin-top: 5rem;
+    }
+    .modal-recent-item {
+      background: #f8f9fa;
+      padding: 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #dee2e6;
+    }
+    .modal-recent-item:hover {
+      background: #e9ecef;
+    }
+    .section-title {
+      font-weight: 600;
+      color: #444;
+      margin: 1.5rem 0 .75rem;
+    }
+
+    .file-card {
+      border-radius: 14px;
+      border: 1px solid #eee;
+      transition: all .18s ease;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    .file-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 28px rgba(0,0,0,.08);
+      border-color: #dbe7ff;
+    }
+
+    .file-card.selected {
+      border: 2px solid #0d6efd;
+      background: #f7fbff;
+    }
+
+    .file-icon {
+      font-size: 1.6rem;
+      color: #0d6efd;
+    }
+
+    .file-name {
+      font-weight: 600;
+      font-size: .95rem;
+      line-height: 1.3;
+    }
+
+    .star-btn {
+      border: none;
+      background: transparent;
+      color: #bbb;
+      font-size: 1.2rem;
+      padding: 0;
+    }
+
+    .star-btn.active {
+      color: #ffc107;
+    }
+
+    .star-btn:hover {
+      transform: scale(1.15);
+    }
+
+    .checkbox-custom {
+      transform: scale(1.15);
+      cursor: pointer;
+    }
+
+    .recent-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #e7f1ff;
+      color: #0d6efd;
+      font-size: .65rem;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .download-single {
+      width: 100%;
+      border-radius: 8px;
+    }
+
+    .file-card .star-btn.active {
+      animation: pop .25s ease;
+    }
+
+    .history-info-btn {
+      border: none;
+      background: transparent;
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .history-info-btn:hover {
+      transform: scale(1.08);
+    }
+
+    .history-status-cell {
+      font-size: 1.15rem;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .history-table-wrap {
+      max-height: 65vh;
+      overflow: auto;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.4); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body data-is-admin="{{ 'true' if is_admin else 'false' }}">
+  <!-- === NAVBAR === -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}" 
+            alt="JNE Logo" 
+            width="50" 
+            height="50" 
+            class="me-2 d-inline-block align-middle">
+        CCC DS Data Hub
+        </a>
+
+        <button class="navbar-toggler bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/">
+                <i class="bi bi-bar-chart-fill me-1"></i> Performance
+            </a>
+            </li>
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/full">
+                <i class="bi bi-stack me-1"></i> Full Data
+            </a>
+            </li>
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/report">
+                <i class="bi bi-file-earmark-text me-1"></i> Report
+            </a>
+            <li class="nav-item">
+            <a class="btn btn-sm btn-active" href="/report_explorer">
+                <i class="bi bi-folder2-open me-1"></i> Report Explorer
+            </a>
+            </li>
+            </li>
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/apex_uploader">
+                <i class="bi bi-arrow-down-up me-1"></i> Apex Uploader
+            </a>
+            </li>
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/apex_requester">
+                <i class="bi bi-arrow-down me-1"></i> Apex Requester
+            </a>
+            </li>
+            </ul>
+        </div>
+        </div>
+  </nav>
+
+  <main>
+    <div class="container mt-3">
+      <h1 class="mb-3">
+        <i class="bi bi-folder2-open me-2"></i> Report Explorer
+      </h1>
+      <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+        <p class="text-muted mb-0">
+          Lihat, cari, dan download report yang sudah diproduksi.
+        </p>
+        {% if is_admin %}
+        <button class="history-info-btn" id="historyInfoBtn" type="button" title="Lihat status query dan edit report">
+          ℹ️
+        </button>
+        {% endif %}
+      </div>
+
+      <!-- Filter Section -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row g-3 align-items-end filter-controls">
+            <div class="col-md-3">
+              <label class="form-label"><i class="bi bi-calendar3 me-1"></i> Pilih Tanggal:</label>
+              <input type="date" id="reportDate" class="form-control" value="{{ today }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label"><i class="bi bi-tags me-1"></i> Filter Industry:</label>
+              <select id="tagSelect" class="form-select" multiple></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label"><i class="bi bi-search me-1"></i> Cari File:</label>
+              <input type="text" id="searchInput" class="form-control" placeholder="Ketik nama file...">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label d-block">&nbsp;</label>
+              <button class="btn btn-primary w-100" id="loadBtn">
+                <i class="bi bi-arrow-clockwise me-1"></i> Load
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="filter-tabs">
+        <div class="filter-tab active" data-filter="all">
+          <i class="bi bi-file-earmark me-1"></i> Semua File
+        </div>
+        <div class="filter-tab" data-filter="favorites">
+          <i class="bi bi-star-fill me-1"></i> Favorit
+        </div>
+          <button class="see-all-btn ms-auto" id="seeAllBtn">
+            <i class="bi bi-clock-history me-1"></i> See Recently Downloaded
+            <span class="badge bg-danger text-light ms-2" id="recentCount">0</span>
+          </button>
+      </div>
+
+      <!-- Recently Downloaded Section -->
+
+      <!-- Action Bar -->
+      <div class="action-bar mb-3" id="actionBar" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <span class="badge bg-primary" id="selectedCount">0 dipilih</span>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" id="selectAllBtn">
+              <i class="bi bi-check-all me-1"></i> Pilih Semua
+            </button>
+            <button class="btn btn-sm btn-outline-secondary me-2" id="deselectAllBtn">
+              <i class="bi bi-x-circle me-1"></i> Batal Pilih
+            </button>
+            <button class="btn btn-sm btn-success" id="downloadSelectedBtn" disabled>
+              <i class="bi bi-download me-1"></i> Download Terpilih
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading Indicator -->
+      <div id="loadingIndicator" class="text-center my-5" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Memuat file...</p>
+      </div>
+
+      <!-- File List -->
+      <h6 class="section-title" id="favoriteSectionTitle">
+        ⭐ Favorite Reports
+      </h6>
+      <div id="favoriteList" class="row g-3 mb-4"></div>
+
+      <h6 class="section-title" id="allReportsSectionTitle">
+        📄 All Reports
+      </h6>
+
+      <div id="fileList" class="row g-3"></div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="text-center my-5" style="display: none;">
+        <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+        <p class="text-muted mt-3">Tidak ada file ditemukan. Silakan tunggu beberapa saat dan coba lagi.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal for All Recent Downloads -->
+  <div class="modal fade" id="recentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-clock-history me-2"></i> Recent Downloads Today
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="modalRecentList"></div>
+          <div id="modalEmptyState" class="text-center py-5" style="display: none;">
+            <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+            <p class="text-muted mt-3">Belum ada download hari ini</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div class="modal fade" id="historyStatusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-table me-2"></i> Status Query dan Edit Report
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="historyStatusLoading" class="text-center py-4" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 mb-0">Memuat status report...</p>
+          </div>
+          <div id="historyStatusError" class="alert alert-danger" style="display: none;"></div>
+
+          <!-- Parquet source status -->
+          <div id="parquetSourceSection" class="mb-4" style="display: none;">
+            <h6 class="fw-semibold text-secondary mb-2">
+              <i class="bi bi-database me-1"></i> Status Sumber Data Parquet
+              <small class="fw-normal ms-2" id="parquetLogNote"></small>
+            </h6>
+            <div class="row g-2 mb-2">
+              <div class="col-4">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body py-2">
+                    <small class="text-muted d-block">Total Excel</small>
+                    <div class="fw-bold fs-5" id="parquetTotalExcel">0</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body py-2">
+                    <small class="text-muted d-block">Processed ✅</small>
+                    <div class="fw-bold fs-5 text-success" id="parquetTotalDone">0</div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="card border-0 shadow-sm h-100">
+                  <div class="card-body py-2">
+                    <small class="text-muted d-block">Failed / Pending ⚠️</small>
+                    <div class="fw-bold fs-5 text-warning" id="parquetTotalPending">0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <table class="table table-sm table-borderless align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Bulan</th>
+                  <th class="text-center">Total</th>
+                  <th class="text-center">Done</th>
+                  <th class="text-center">Failed</th>
+                  <th class="text-center">Pending</th>
+                </tr>
+              </thead>
+              <tbody id="parquetMonthRows"></tbody>
+            </table>
+          </div>
+          <hr id="parquetDivider" class="mb-3" style="display: none;">
+
+          <div id="historyStatusCounters" class="row g-2 mb-3" style="display: none;">
+            <div class="col-md-4">
+              <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2">
+                  <small class="text-muted d-block">Report Total</small>
+                  <div class="fw-bold fs-5" id="historyCountReports">0</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2">
+                  <small class="text-muted d-block">Query Succeed</small>
+                  <div class="fw-bold fs-5 text-success" id="historyCountQuery">0</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="card border-0 shadow-sm h-100">
+                <div class="card-body py-2">
+                  <small class="text-muted d-block">Edit Succeed</small>
+                  <div class="fw-bold fs-5 text-success" id="historyCountEdit">0</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="historyStatusMeta" class="small text-muted mb-3" style="display: none;"></div>
+          <div id="historyStatusTableWrap" class="history-table-wrap" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <span class="fw-semibold"></span>
+              <div>
+                <label class="form-label mb-0 me-2 d-inline">Sort:</label>
+                <select id="historySortSelect" class="form-select form-select-sm d-inline-block" style="width: auto;">
+                  <option value="name-asc">Nama (A-Z)</option>
+                  <option value="name-desc">Nama (Z-A)</option>
+                  <option value="query-fail">Query - Gagal Dulu</option>
+                  <option value="query-success">Query - Berhasil Dulu</option>
+                  <option value="edit-fail">Edit - Gagal Dulu</option>
+                  <option value="edit-success">Edit - Berhasil Dulu</option>
+                </select>
+              </div>
+            </div>
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th>Report Name</th>
+                  <th class="text-center">Query</th>
+                  <th class="text-center">Edit</th>
+                </tr>
+              </thead>
+              <tbody id="historyStatusTableBody"></tbody>
+            </table>
+          </div>
+          <div id="historyStatusEmpty" class="text-center py-5" style="display: none;">
+            <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+            <p class="text-muted mt-3 mb-0">Belum ada data process history.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- === FOOTER === -->
+  <footer>
+    <small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small>
+  </footer>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+  <script>
+    // Subtle gradient follow mouse
+    document.addEventListener("mousemove", (e) => {
+      const x = `${(e.clientX / window.innerWidth) * 100}%`;
+      const y = `${(e.clientY / window.innerHeight) * 100}%`;
+      document.body.style.setProperty("--mouse-x", x);
+      document.body.style.setProperty("--mouse-y", y);
+    });
+
+    document.getElementById("year").textContent = new Date().getFullYear();
+
+    let allFiles = [];
+    let selectedFiles = new Set();
+    let userPreferences = {
+      favorites: [],
+      recent_downloads: []
+    };
+    let currentFilter = 'all';
+    let selectedTags = [];
+    let availableTags = [];
+    let tagSelect = null;
+    const isAdmin = document.body.dataset.isAdmin === 'true';
+    let historyStatusRows = [];
+
+    // Load user preferences and files when page loads
+    document.addEventListener('DOMContentLoaded', async function() {
+      await loadUserPreferences();
+      await loadFiles();
+
+      if (isAdmin) {
+        const historyInfoBtn = document.getElementById('historyInfoBtn');
+        if (historyInfoBtn) {
+          historyInfoBtn.addEventListener('click', openHistoryStatusModal);
+        }
+      }
+    });
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function openHistoryStatusModal() {
+      const modalEl = document.getElementById('historyStatusModal');
+      const loadingEl = document.getElementById('historyStatusLoading');
+      const errorEl = document.getElementById('historyStatusError');
+      const parquetSectionEl = document.getElementById('parquetSourceSection');
+      const parquetDividerEl = document.getElementById('parquetDivider');
+      const parquetLogNoteEl = document.getElementById('parquetLogNote');
+      const parquetTotalExcelEl = document.getElementById('parquetTotalExcel');
+      const parquetTotalDoneEl = document.getElementById('parquetTotalDone');
+      const parquetTotalPendingEl = document.getElementById('parquetTotalPending');
+      const parquetMonthRowsEl = document.getElementById('parquetMonthRows');
+      const countersEl = document.getElementById('historyStatusCounters');
+      const countReportsEl = document.getElementById('historyCountReports');
+      const countQueryEl = document.getElementById('historyCountQuery');
+      const countEditEl = document.getElementById('historyCountEdit');
+      const metaEl = document.getElementById('historyStatusMeta');
+      const tableWrapEl = document.getElementById('historyStatusTableWrap');
+      const emptyEl = document.getElementById('historyStatusEmpty');
+      const tbodyEl = document.getElementById('historyStatusTableBody');
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+      loadingEl.style.display = 'block';
+      errorEl.style.display = 'none';
+      parquetSectionEl.style.display = 'none';
+      parquetDividerEl.style.display = 'none';
+      countersEl.style.display = 'none';
+      countReportsEl.textContent = '0';
+      countQueryEl.textContent = '0';
+      countEditEl.textContent = '0';
+      metaEl.style.display = 'none';
+      tableWrapEl.style.display = 'none';
+      emptyEl.style.display = 'none';
+      tbodyEl.innerHTML = '';
+      parquetMonthRowsEl.innerHTML = '';
+      modal.show();
+
+      try {
+        const [histRes, parquetRes] = await Promise.allSettled([
+          fetch('/report_history_status'),
+          fetch('/parquet_source_status')
+        ]);
+
+        // --- Parquet source section ---
+        if (parquetRes.status === 'fulfilled' && parquetRes.value.ok) {
+          const pd = await parquetRes.value.json();
+          parquetTotalExcelEl.textContent = String(pd.total_excel);
+          parquetTotalDoneEl.textContent = String(pd.total_done);
+          parquetTotalPendingEl.textContent = String(pd.total_failed + pd.total_unprocessed);
+          parquetLogNoteEl.textContent = pd.log_exists ? '' : '(log tidak ditemukan)';
+          parquetMonthRowsEl.innerHTML = '';
+          (pd.months || []).forEach(m => {
+            const dirNote = m.dir_exists ? '' : ' <small class="text-muted">(dir tidak ada)</small>';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${escapeHtml(m.label)}${dirNote}</td>
+              <td class="text-center">${m.total}</td>
+              <td class="text-center text-success fw-semibold">${m.done}</td>
+              <td class="text-center ${m.failed > 0 ? 'text-danger' : 'text-muted'}">${m.failed}</td>
+              <td class="text-center ${m.unprocessed > 0 ? 'text-warning' : 'text-muted'}">${m.unprocessed}</td>
+            `;
+            parquetMonthRowsEl.appendChild(tr);
+          });
+          parquetSectionEl.style.display = 'block';
+          parquetDividerEl.style.display = 'block';
+        }
+
+        // --- History status section ---
+        if (histRes.status !== 'fulfilled') {
+          throw new Error('Gagal memuat process history.');
+        }
+        const response = histRes.value;
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Gagal memuat process history.');
+        }
+
+        loadingEl.style.display = 'none';
+
+        if (!data.rows || data.rows.length === 0) {
+          emptyEl.style.display = 'block';
+          return;
+        }
+
+        const totalReports = data.rows.length;
+        const querySuccess = data.rows.filter(row => row.query && row.query.icon === '✅').length;
+        const editSuccess = data.rows.filter(row => row.edit && row.edit.icon === '✅').length;
+
+        countReportsEl.textContent = String(totalReports);
+        countQueryEl.textContent = String(querySuccess);
+        countEditEl.textContent = String(editSuccess);
+        countersEl.style.display = 'flex';
+
+        metaEl.textContent = `Sumber: ${data.source} | Patokan hari ini: ${data.today}`;
+        metaEl.style.display = 'block';
+
+        // Store rows for sorting
+        historyStatusRows = data.rows;
+
+        // Render table with current sort
+        const sortSelect = document.getElementById('historySortSelect');
+        if (sortSelect) {
+          sortSelect.value = 'name-asc';
+          sortSelect.addEventListener('change', rerenderHistoryTable);
+        }
+
+        rerenderHistoryTable();
+
+        tableWrapEl.style.display = 'block';
+      } catch (error) {
+        loadingEl.style.display = 'none';
+        errorEl.textContent = error.message || 'Gagal memuat process history.';
+        errorEl.style.display = 'block';
+      }
+    }
+
+    function rerenderHistoryTable() {
+      const sortSelect = document.getElementById('historySortSelect');
+      const tbodyEl = document.getElementById('historyStatusTableBody');
+      const sortMode = sortSelect ? sortSelect.value : 'name-asc';
+
+      // Create copy of rows and sort
+      let sortedRows = [...historyStatusRows];
+      
+      switch(sortMode) {
+        case 'name-desc':
+          sortedRows.sort((a, b) => b.report_name.localeCompare(a.report_name));
+          break;
+        case 'query-fail':
+          sortedRows.sort((a, b) => {
+            const aFail = a.query.icon !== '✅' ? 0 : 1;
+            const bFail = b.query.icon !== '✅' ? 0 : 1;
+            if (aFail !== bFail) return aFail - bFail;
+            return a.report_name.localeCompare(b.report_name);
+          });
+          break;
+        case 'query-success':
+          sortedRows.sort((a, b) => {
+            const aSuccess = a.query.icon === '✅' ? 0 : 1;
+            const bSuccess = b.query.icon === '✅' ? 0 : 1;
+            if (aSuccess !== bSuccess) return aSuccess - bSuccess;
+            return a.report_name.localeCompare(b.report_name);
+          });
+          break;
+        case 'edit-fail':
+          sortedRows.sort((a, b) => {
+            const aFail = a.edit.icon !== '✅' ? 0 : 1;
+            const bFail = b.edit.icon !== '✅' ? 0 : 1;
+            if (aFail !== bFail) return aFail - bFail;
+            return a.report_name.localeCompare(b.report_name);
+          });
+          break;
+        case 'edit-success':
+          sortedRows.sort((a, b) => {
+            const aSuccess = a.edit.icon === '✅' ? 0 : 1;
+            const bSuccess = b.edit.icon === '✅' ? 0 : 1;
+            if (aSuccess !== bSuccess) return aSuccess - bSuccess;
+            return a.report_name.localeCompare(b.report_name);
+          });
+          break;
+        default: // name-asc
+          sortedRows.sort((a, b) => a.report_name.localeCompare(b.report_name));
+      }
+
+      // Clear and repopulate table
+      tbodyEl.innerHTML = '';
+      sortedRows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(row.report_name)}</td>
+          <td class="history-status-cell" title="${escapeHtml(row.query.label)}${row.query.date ? ' (' + escapeHtml(row.query.date) + ')' : ''}">${row.query.icon}</td>
+          <td class="history-status-cell" title="${escapeHtml(row.edit.label)}${row.edit.date ? ' (' + escapeHtml(row.edit.date) + ')' : ''}">${row.edit.icon}</td>
+        `;
+        tbodyEl.appendChild(tr);
+      });
+    }
+
+    // Load user preferences
+    async function loadUserPreferences() {
+      try {
+        const response = await fetch('/user_preferences');
+        userPreferences = await response.json();
+        updateRecentDownloads();
+      } catch (error) {
+        console.error('Error loading user preferences:', error);
+      }
+    }
+
+    // Update recent downloads count
+    function updateRecentDownloads() {
+      const recentCount = document.getElementById('recentCount');
+      const count = userPreferences.recent_downloads.length;
+      recentCount.textContent = count;
+      recentCount.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+    
+    // Show modal with all recent downloads
+    document.getElementById('seeAllBtn').addEventListener('click', function() {
+      const modalList = document.getElementById('modalRecentList');
+      const modalEmpty = document.getElementById('modalEmptyState');
+      
+      if (userPreferences.recent_downloads.length === 0) {
+        modalList.style.display = 'none';
+        modalEmpty.style.display = 'block';
+      } else {
+        modalList.style.display = 'block';
+        modalEmpty.style.display = 'none';
+        modalList.innerHTML = '';
+        
+        userPreferences.recent_downloads.forEach((item, index) => {
+          const div = document.createElement('div');
+          div.className = 'modal-recent-item';
+          div.innerHTML = `
+            <div>
+              <strong>${item.key}</strong>
+              <br>
+              <small class="text-muted">
+                <i class="bi bi-clock me-1"></i>${formatRecentTime(item.timestamp)}
+              </small>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" onclick="quickDownloadRecent('${item.filename.replace(/'/g, "\\'")}', '${(item.path || item.filename).replace(/'/g, "\\'")}')">
+              <i class="bi bi-download me-1"></i> Download
+            </button>
+          `;
+          modalList.appendChild(div);
+        });
+      }
+      
+      const modal = new bootstrap.Modal(document.getElementById('recentModal'));
+      modal.show();
+    });
+
+    // Format recent download time
+    function formatRecentTime(timestamp) {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      
+      if (diffMins < 1) return 'Baru saja';
+      if (diffMins < 60) return `${diffMins} menit yang lalu`;
+      
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours} jam yang lalu`;
+      
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays < 7) return `${diffDays} hari yang lalu`;
+      
+      return date.toLocaleDateString('id-ID');
+    }
+
+    // Quick download from recent
+    window.quickDownloadRecent = function(filename, path) {
+      const date = document.getElementById('reportDate').value;
+      const target = path || filename;
+      window.location.href = `/download_reports?date=${date}&files=${encodeURIComponent(target)}`;
+    }
+
+    // Filter tabs
+    document.querySelectorAll('[data-filter]').forEach(tab => {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('[data-filter]').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        currentFilter = this.dataset.filter;
+        filterAndRenderFiles();
+      });
+    });
+
+    // Load button click
+    document.getElementById('loadBtn').addEventListener('click', loadFiles);
+
+    // Search functionality
+    document.getElementById('searchInput').addEventListener('input', function() {
+      filterAndRenderFiles();
+    });
+
+    // Filter and render files based on current filter and search
+    function filterAndRenderFiles() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      let filtered = allFiles;
+      
+      // Apply search filter
+      if (query) {
+        filtered = filtered.filter(f => f.name.toLowerCase().includes(query));
+      }
+      
+      // Apply category filter
+      if (currentFilter === 'favorites') {
+        filtered = filtered.filter(f => {
+          const key = extractFileKey(f.name);
+          return userPreferences.favorites.includes(key);
+        });
+      }
+
+      // Apply tag filter
+      if (selectedTags.length > 0) {
+        filtered = filtered.filter(f => selectedTags.includes(f.tag));
+      }
+      
+      // Sort: favorites first
+      filtered.sort((a, b) => {
+        const aKey = extractFileKey(a.name);
+        const bKey = extractFileKey(b.name);
+        const aFav = userPreferences.favorites.includes(aKey);
+        const bFav = userPreferences.favorites.includes(bKey);
+        
+        if (aFav && !bFav) return -1;
+        if (!aFav && bFav) return 1;
+        
+        // Then by modified date
+        return b.modified_ts - a.modified_ts;
+      });
+      
+      renderFiles(filtered);
+      
+      // Toggle section visibility based on filter
+      const favTitle = document.getElementById('favoriteSectionTitle');
+      const allTitle = document.getElementById('allReportsSectionTitle');
+      const favoriteList = document.getElementById('favoriteList');
+      const fileList = document.getElementById('fileList');
+      
+      if (currentFilter === 'favorites') {
+        // Favorite mode: hide "All Reports" section
+        allTitle.style.display = 'none';
+        fileList.style.display = 'none';
+      } else {
+        // All mode: show both sections
+        allTitle.style.display = 'block';
+        fileList.style.display = 'flex';
+      }
+    }
+
+    function renderTagSelect(tags) {
+      const selectEl = document.getElementById('tagSelect');
+      if (!tagSelect) {
+        tagSelect = new TomSelect(selectEl, {
+          plugins: ['remove_button'],
+          maxItems: null,
+          placeholder: 'Pilih industry..'
+        });
+
+        tagSelect.on('change', () => {
+          const values = tagSelect.getValue();
+          selectedTags = Array.isArray(values) ? values : (values ? [values] : []);
+          filterAndRenderFiles();
+        });
+      }
+
+      const prevSelected = selectedTags.slice();
+      tagSelect.clearOptions();
+      (tags || []).forEach(tag => {
+        tagSelect.addOption({ value: tag, text: tag });
+      });
+      tagSelect.refreshOptions(false);
+
+      const stillValid = prevSelected.filter(tag => (tags || []).includes(tag));
+      tagSelect.setValue(stillValid, true);
+      selectedTags = stillValid;
+    }
+
+    // Extract file key (before dash)
+    function extractFileKey(filename) {
+      const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+      if (nameWithoutExt.includes(' - ')) {
+        return nameWithoutExt.split(' - ')[0].trim();
+      }
+      return nameWithoutExt.trim();
+    }
+
+    // Select All
+    document.getElementById('selectAllBtn').addEventListener('click', function() {
+      document.querySelectorAll('.file-checkbox').forEach(cb => {
+        if (!cb.checked) cb.click();
+      });
+    });
+
+    // Deselect All
+    document.getElementById('deselectAllBtn').addEventListener('click', function() {
+      document.querySelectorAll('.file-checkbox').forEach(cb => {
+        if (cb.checked) cb.click();
+      });
+    });
+
+    // Download Selected
+    document.getElementById('downloadSelectedBtn').addEventListener('click', function() {
+      if (selectedFiles.size === 0) return;
+      
+      const date = document.getElementById('reportDate').value;
+      const files = Array.from(selectedFiles);
+      
+      // Create download URL
+      const params = new URLSearchParams();
+      params.append('date', date);
+      files.forEach(f => params.append('files', f));
+      
+      window.location.href = `/download_reports?${params.toString()}`;
+    });
+
+    async function loadFiles() {
+      const date = document.getElementById('reportDate').value;
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      const fileList = document.getElementById('fileList');
+      const emptyState = document.getElementById('emptyState');
+      
+      loadingIndicator.style.display = 'block';
+      fileList.innerHTML = '';
+      emptyState.style.display = 'none';
+      selectedFiles.clear();
+      updateActionBar();
+      
+      try {
+        const response = await fetch(`/list_reports?date=${date}`);
+        const data = await response.json();
+        
+        allFiles = data.files || [];
+        availableTags = data.tags || [];
+        renderTagSelect(availableTags);
+        
+        loadingIndicator.style.display = 'none';
+        
+        if (allFiles.length === 0) {
+          emptyState.style.display = 'block';
+          document.getElementById('actionBar').style.display = 'none';
+        } else {
+          filterAndRenderFiles();
+          document.getElementById('actionBar').style.display = 'block';
+        }
+        
+        // Reload user preferences to check for new favorites and recent downloads
+        await loadUserPreferences();
+        updateRecentDownloads();
+      } catch (error) {
+        console.error('Error loading files:', error);
+        loadingIndicator.style.display = 'none';
+        emptyState.style.display = 'block';
+        alert('Gagal memuat file. Pastikan path tersedia.');
+      }
+    }
+
+    function renderFiles(files) {
+      const favoriteList = document.getElementById('favoriteList');
+      const fileList = document.getElementById('fileList');
+      const favTitle = document.getElementById('favoriteSectionTitle');
+      
+      favoriteList.innerHTML = '';
+      fileList.innerHTML = '';
+      
+      // Separate favorites and non-favorites
+      const favorites = [];
+      const nonFavorites = [];
+      
+      files.forEach(file => {
+        const fileKey = extractFileKey(file.name);
+        const isFavorite = userPreferences.favorites.includes(fileKey);
+        
+        if (isFavorite) {
+          favorites.push(file);
+        } else {
+          nonFavorites.push(file);
+        }
+      });
+      
+      // Show/hide favorite section
+      if (favorites.length === 0) {
+        favTitle.style.display = 'none';
+        favoriteList.style.display = 'none';
+      } else {
+        favTitle.style.display = 'block';
+        favoriteList.style.display = 'flex';
+      }
+      
+      // Render favorites
+      favorites.forEach(file => {
+        const col = createFileCard(file, favoriteList);
+        favoriteList.appendChild(col);
+      });
+      
+      // Render non-favorites
+      nonFavorites.forEach(file => {
+        const col = createFileCard(file, fileList);
+        fileList.appendChild(col);
+      });
+    }
+    
+    function createFileCard(file, container) {
+      const col = document.createElement('div');
+      col.className = 'col-md-6 col-lg-4';
+      
+      const card = document.createElement('div');
+      card.className = 'card file-card h-100';
+      card.style.position = 'relative';
+      const filePath = file.rel_path || file.name;
+      if (selectedFiles.has(filePath)) card.classList.add('selected');
+      
+      const fileExt = file.name.split('.').pop().toLowerCase();
+      const iconClass = fileExt === 'xlsx' || fileExt === 'xls' ? 'bi-file-earmark-excel' : 
+                       fileExt === 'csv' ? 'bi-file-earmark-text' :
+                       fileExt === 'pdf' ? 'bi-file-earmark-pdf' : 'bi-file-earmark';
+      
+      const fileKey = extractFileKey(file.name);
+      const isFavorite = userPreferences.favorites.includes(fileKey);
+      const isRecent = userPreferences.recent_downloads.some(r => r.key === fileKey);
+      const tagBadge = file.tag ? `<span>${file.tag}</span>` : '';
+      
+      card.innerHTML = `
+        ${isRecent ? '<div class="recent-badge">NEW</div>' : ''}
+        <div class="card-body">
+          <div class="d-flex align-items-start">
+            <input type="checkbox" class="checkbox-custom me-2 file-checkbox" data-filepath="${filePath}" ${selectedFiles.has(filePath) ? 'checked' : ''}>
+            <button class="star-btn ${isFavorite ? 'active' : ''} me-2" data-filename="${file.name}" title="Favorite">
+              <i class="bi bi-star-fill"></i>
+            </button>
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center mb-2">
+                <i class="bi ${iconClass} file-icon me-2"></i>
+                <h6 class="mb-0 file-name">${file.name}</h6>
+              </div>
+              <small class="text-muted d-block">
+                ${tagBadge}
+              </small>
+              <small class="text-muted d-block">
+                <i class="bi bi-hdd me-1"></i> ${formatFileSize(file.size)}
+              </small>
+              <small class="text-muted d-block">
+                <i class="bi bi-clock me-1"></i> ${formatModifiedDate(file.modified)}
+              </small>
+            </div>
+          </div>
+          <div class="mt-3">
+            <button class="btn btn-sm btn-outline-primary download-single" data-filename="${file.name}">
+              <i class="bi bi-download me-1"></i> Download
+            </button>
+          </div>
+        </div>
+      `;
+      
+      // Star button (favorite)
+      const starBtn = card.querySelector('.star-btn');
+      starBtn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        await toggleFavorite(file.name, this);
+      });
+      
+      // Checkbox toggle
+      const checkbox = card.querySelector('.file-checkbox');
+      checkbox.addEventListener('change', function(e) {
+        const filePathValue = this.dataset.filepath || file.name;
+        if (this.checked) {
+          selectedFiles.add(filePathValue);
+          card.classList.add('selected');
+        } else {
+          selectedFiles.delete(filePathValue);
+          card.classList.remove('selected');
+        }
+        updateActionBar();
+      });
+      
+      checkbox.addEventListener('click', function(e) {
+        e.stopPropagation();
+      });
+      
+      // Card click toggles checkbox
+      card.addEventListener('click', function(e) {
+        if (!e.target.classList.contains('download-single') && 
+            !e.target.classList.contains('star-btn') &&
+            !e.target.classList.contains('file-checkbox') &&
+            e.target.tagName !== 'BUTTON' && 
+            e.target.tagName !== 'I') {
+          checkbox.click();
+        }
+      });
+      
+      // Single download
+      card.querySelector('.download-single').addEventListener('click', function(e) {
+        e.stopPropagation();
+        const date = document.getElementById('reportDate').value;
+        window.location.href = `/download_reports?date=${date}&files=${encodeURIComponent(filePath)}`;
+      });
+      
+      col.appendChild(card);
+      return col;
+    }
+
+    // Toggle favorite
+    async function toggleFavorite(filename, btn) {
+      try {
+        const response = await fetch('/toggle_favorite', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({filename: filename})
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          if (result.is_favorite) {
+            btn.classList.add('active');
+            if (!userPreferences.favorites.includes(result.file_key)) {
+              userPreferences.favorites.push(result.file_key);
+            }
+          } else {
+            btn.classList.remove('active');
+            userPreferences.favorites = userPreferences.favorites.filter(f => f !== result.file_key);
+          }
+          
+          // Re-sort if needed
+          filterAndRenderFiles();
+        }
+      } catch (error) {
+        console.error('Error toggling favorite:', error);
+      }
+    }
+
+    function filterFiles(query) {
+      const filtered = allFiles.filter(f => f.name.toLowerCase().includes(query));
+      renderFiles(filtered);
+    }
+
+    function updateActionBar() {
+      const count = selectedFiles.size;
+      document.getElementById('selectedCount').textContent = `${count} dipilih`;
+      document.getElementById('downloadSelectedBtn').disabled = count === 0;
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function formatModifiedDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const fileDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      
+      const timePart = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+      
+      if (fileDate.getTime() === today.getTime()) {
+        return `Hari ini ${timePart}`;
+      } else if (fileDate.getTime() === today.getTime() - 86400000) {
+        return `Kemarin ${timePart}`;
+      } else {
+        return date.toLocaleString('id-ID', { 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    }
+  </script>
+</body>
+</html>

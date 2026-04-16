@@ -1,0 +1,37 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment variables (sensitive)
+.env
+.env.local
+.env.*.local
+
+# Build and test artifacts
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editor/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Runtime output and temp files
+output/
+*.log
+*.tmp
+*.bak
+
+# User data (contains IP addresses and preferences)
+data/
+scripts/lists.py

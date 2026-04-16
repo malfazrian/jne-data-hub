@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>APEX Uploader</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="h-100">
+  <!-- === NAVBAR === -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}" 
+            alt="JNE Logo" 
+            width="50" 
+            height="50" 
+            class="me-2 d-inline-block align-middle">
+        CCC DS Data Hub
+        </a>
+
+        <button class="navbar-toggler bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+            <!-- Performance Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/">
+                <i class="bi bi-bar-chart-fill me-1"></i> Performance
+            </a>
+            </li>
+
+            <!-- Full Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/full">
+                <i class="bi bi-stack me-1"></i> Full Data
+            </a>
+            </li>
+
+            <!-- Report Mode -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report">
+                <i class="bi bi-file-earmark-text me-1"></i> Report
+            </a>
+            </li>
+
+            <!-- Report Explorer -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report_explorer">
+                <i class="bi bi-folder2-open me-1"></i> Report Explorer
+            </a>
+            </li>
+
+            <!-- APEX Uploader -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-active" href="/apex_uploader">
+                <i class="bi bi-arrow-down-up me-1"></i> Apex Uploader
+            </a>
+            </li>
+
+            <!-- APEX Requester -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/apex_requester">
+                <i class="bi bi-arrow-down me-1"></i> Apex Requester
+            </a>
+            </li>
+            </ul>
+        </div>
+        </div>
+  </nav>
+  <main>
+  <div class="container mt-3" style="max-width: min(90%, 720px);">
+    <h1 class="mb-3">APEX Uploader</h1>
+    <p class="text-muted mb-4">
+        Aplikasi untuk otomatisasi proses unggah daftar AWB ke sistem APEX dan unduh hasilnya.
+    </p>
+
+    <form id="jobForm" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label>Pilih Server APEX</label>
+        <select name="host" class="form-select" required>
+          <option value="">-- Pilih Host --</option>
+          <option value="ccc01" selected>ccc01</option>
+          <option value="ccc02">ccc02</option>
+          <option value="ccc03">ccc03</option>
+          <option value="ccc04">ccc04</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label>Email</label>
+        <input type="text" name="username" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label>Password</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+      <div class="mb-3">
+        <label>Upload File AWB (pastikan terdapat kolom “AWB”)</label>
+        <input type="file" name="source_files" class="form-control" accept=".csv,.xlsx" multiple required>
+      </div>
+      <div class="mb-3">
+        <label>Jumlah AWB per Chunk</label>
+        <input 
+          type="number" 
+          name="chunk" 
+          class="form-control" 
+          placeholder="Misal: 5000" 
+          value="5000"
+          min="100" 
+          max="20000" 
+          step="1"
+        >
+      </div>
+      <button type="submit" id="mainBtn" class="btn btn-primary w-100">
+        🚀 Mulai Proses
+      </button>
+    </form>
+
+    <div class="mt-4" id="progressSection" style="display:none;">
+      <div class="progress mb-3">
+        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+             style="width: 0%">0%</div>
+      </div>
+      <pre id="progressLog" class="bg-dark text-white p-3 rounded" style="height:300px;overflow:auto;"></pre>
+    </div>
+  </div>
+  </main>
+
+  <!-- === FOOTER === -->
+  <footer>
+    <small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small>
+  </footer>
+
+<script>
+// Subtle gradient follow mouse
+document.addEventListener("mousemove", (e) => {
+  const root = document.documentElement;
+  const x = `${(e.clientX / window.innerWidth) * 100}%`;
+  const y = `${(e.clientY / window.innerHeight) * 100}%`;
+  root.style.setProperty("--mouse-x", x);
+  root.style.setProperty("--mouse-y", y);
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("jobForm");
+  const mainBtn = document.getElementById("mainBtn");
+  const progressSection = document.getElementById("progressSection");
+  const progressBar = document.getElementById("progressBar");
+  const progressLog = document.getElementById("progressLog");
+
+  let currentJobId = localStorage.getItem("current_job_id");
+
+  // 🆕 Tombol reset untuk memulai proses baru
+  const resetBtn = document.createElement("button");
+  resetBtn.textContent = "🔄 Reset";
+  resetBtn.className = "btn btn-outline-danger w-100 mt-2";
+  resetBtn.style.display = "none";
+  resetBtn.onclick = async () => {
+    if (currentJobId) {
+      await fetch(`/cancel-job/${currentJobId}`, { method: "POST" });
+    }
+    localStorage.removeItem("current_job_id");
+    currentJobId = null;
+    progressSection.style.display = "none";
+    progressLog.textContent = "";
+    resetButton();
+    disableForm(false);
+    resetBtn.style.display = "none";
+    appendLog("🧹 Job dibatalkan & form direset.");
+  };
+  form.parentNode.insertBefore(resetBtn, progressSection);
+
+  // === Cek apakah ada job tersimpan di browser (resume / download) ===
+  if (currentJobId) {
+    fetch(`/check-job/${currentJobId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.exists) {
+          progressSection.style.display = "block";
+
+          if (!data.done) {
+            appendLog("🔄 Melanjutkan progress job sebelumnya...");
+            listenProgress(currentJobId);
+            disableForm(true);
+          } else {
+            appendLog("✅ Job sebelumnya sudah selesai. Anda bisa mendownload hasilnya.");
+            showDownloadButton(currentJobId);
+            resetBtn.style.display = "block";
+          }
+        }
+      })
+      .catch(err => {
+        console.error("Check job failed:", err);
+      });
+  }
+
+  // === Submit Job Baru ===
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    progressSection.style.display = "none";
+    progressLog.textContent = "";
+    progressBar.style.width = "0%";
+    progressBar.textContent = "0%";
+    progressBar.classList.remove("bg-success");
+    progressBar.classList.add("progress-bar-animated");
+
+    mainBtn.disabled = true;
+    mainBtn.innerHTML = "⏳ Memproses...";
+    mainBtn.classList.remove("btn-primary");
+    mainBtn.classList.add("btn-secondary");
+
+    const formData = new FormData(form);
+    disableForm(true);
+
+    try {
+      const res = await fetch("/start_job", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (data.job_id) {
+        currentJobId = data.job_id;
+        localStorage.setItem("current_job_id", currentJobId);
+        progressSection.style.display = "block";
+        listenProgress(currentJobId);
+        resetBtn.style.display = "block";
+      } else {
+        alert(data.error || "Terjadi kesalahan saat memulai job.");
+        resetButton();
+        disableForm(false);
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Gagal mengirim permintaan ke server.");
+      resetButton();
+      disableForm(false);
+    }
+  });
+
+  // === Dengarkan progress job dari server ===
+  function listenProgress(jobId) {
+    const evtSource = new EventSource(`/progress-apex/${jobId}`);
+
+    evtSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.error) {
+        appendLog(`❌ ${data.error}`);
+        evtSource.close();
+        resetButton();
+        disableForm(false);
+        return;
+      }
+
+      const pct = Math.max(0, Math.min(100, data.progress || 0));
+      progressBar.style.width = `${pct}%`;
+      progressBar.textContent = `${pct}%`;
+      progressLog.textContent = (data.log || []).join("\n");
+
+      if (data.done) {
+        evtSource.close();
+        progressBar.classList.remove("progress-bar-animated");
+        progressBar.classList.add("bg-success");
+
+        showDownloadButton(jobId);
+        disableForm(false);
+        resetBtn.style.display = "block";
+      }
+    };
+
+    evtSource.onerror = () => {
+      appendLog("Koneksi progress terputus. Coba refresh halaman.");
+      evtSource.close();
+    };
+  }
+
+  // === Tampilkan tombol download hasil ===
+  function showDownloadButton(jobId) {
+    mainBtn.disabled = false;
+    mainBtn.innerHTML = "⬇️ Download Hasil";
+    mainBtn.classList.remove("btn-secondary");
+    mainBtn.classList.remove("btn-primary");
+    mainBtn.classList.add("btn-success");
+    mainBtn.type = "button";
+    mainBtn.onclick = () => {
+      window.location.href = `/download-apex/${jobId}`;
+    };
+  }
+
+  // === Helpers ===
+  function resetButton() {
+    mainBtn.disabled = false;
+    mainBtn.innerHTML = "🚀 Mulai Proses";
+    mainBtn.classList.remove("btn-secondary", "btn-success");
+    mainBtn.classList.add("btn-primary");
+    mainBtn.type = "submit";
+    mainBtn.onclick = null;
+  }
+
+  function appendLog(message) {
+    progressLog.textContent += `\n${message}`;
+    progressLog.scrollTop = progressLog.scrollHeight;
+  }
+
+  function disableForm(state) {
+    form.querySelectorAll("input, select").forEach(el => el.disabled = state);
+  }
+});
+</script>
+</body>
+</html>

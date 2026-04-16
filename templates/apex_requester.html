@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>APEX Request Dashboard</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<!-- === NAVBAR === -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}" 
+            alt="JNE Logo" 
+            width="50" 
+            height="50" 
+            class="me-2 d-inline-block align-middle">
+        CCC DS Data Hub
+        </a>
+
+        <button class="navbar-toggler bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+            <!-- Performance Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/">
+                <i class="bi bi-bar-chart-fill me-1"></i> Performance
+            </a>
+            </li>
+
+            <!-- Full Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/full">
+                <i class="bi bi-stack me-1"></i> Full Data
+            </a>
+            </li>
+
+            <!-- Report Mode -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report">
+                <i class="bi bi-file-earmark-text me-1"></i> Report
+            </a>
+            </li>
+
+            <!-- Report Explorer -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report_explorer">
+                <i class="bi bi-folder2-open me-1"></i> Report Explorer
+            </a>
+            </li>
+
+            <!-- APEX Uploader -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/apex_uploader">
+                <i class="bi bi-arrow-down-up me-1"></i> Apex Uploader
+            </a>
+            </li>
+
+            <!-- APEX Requester -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-active" href="/apex_requester">
+                <i class="bi bi-arrow-down me-1"></i> Apex Requester
+            </a>
+            </li>
+            </ul>
+        </div>
+        </div>
+  </nav>
+  <main>
+    <div class="container mt-3" style="max-width: min(90%, 720px);">
+    <h1 class="mb-3">APEX Requester</h1>
+    <p class="text-muted mb-4">
+        Aplikasi untuk mengotomatisasi proses request AWB ke sistem APEX berdasarkan ID account dan tanggal entry.
+    </p>
+
+    <div class="card p-4 shadow-sm">
+        <form id="apexForm">
+        <div class="mb-3">
+            <label>Pilih Server APEX</label>
+            <select name="host" id="host" class="form-select" required>
+                <option value="">-- Pilih Host --</option>
+                <option value="ccc01" selected>ccc01</option>
+                <option value="ccc02">ccc02</option>
+                <option value="ccc03">ccc03</option>
+                <option value="ccc04">ccc04</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="text" class="form-control" id="username" placeholder="username@example.com" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Customer IDs (pisahkan spasi)</label>
+            <input type="text" class="form-control" id="customer_ids" placeholder="81635700 81635701">
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Periode Tanggal</label>
+            <input type="text" class="form-control" id="dateRange" placeholder="Pilih rentang tanggal" required>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" id="startBtn" class="btn btn-primary w-100">Mulai Proses</button>
+            <button type="button" id="resetBtn" class="btn btn-secondary w-50 d-none">Reset</button>
+        </div>
+        </form>
+    </div>
+
+    <div id="progressSection" class="mt-4 d-none">
+        <h5>Progress:</h5>
+        <div class="progress mb-3">
+        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
+        </div>
+        <table class="table table-sm table-bordered" id="trackerTable">
+        <thead class="table-light">
+            <tr>
+            <th>Task</th>
+            <th>Request</th>
+            <th>Download</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+        </table>
+    </div>
+    </div>
+    </main>
+    <!-- === FOOTER === -->
+  <footer>
+    <small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small>
+  </footer>
+<script
+  src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="/static/apex_requester.js"></script>
+</body>
+</html>

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    {% if mode == 'full' %}
+      Full Data Extractor
+    {% elif mode == 'report' %}
+      Report Data Extractor
+    {% else %}
+      Performance Data Extractor
+    {% endif %}
+  </title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.bootstrap5.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body class="h-100">
+  <!-- === NAVBAR === -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}" 
+            alt="JNE Logo" 
+            width="50" 
+            height="50" 
+            class="me-2 d-inline-block align-middle">
+        CCC DS Data Hub
+        </a>
+
+        <button class="navbar-toggler bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+            <!-- Performance Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm {% if mode not in ['full', 'report'] %}btn-active{% else %}btn-outline-light{% endif %}" href="/">
+                <i class="bi bi-bar-chart-fill me-1"></i> Performance
+            </a>
+            </li>
+
+            <!-- Full Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm {% if mode == 'full' %}btn-active{% else %}btn-outline-light{% endif %}" href="/full">
+                <i class="bi bi-stack me-1"></i> Full Data
+            </a>
+            </li>
+
+            <!-- Report Mode -->
+            <li class="nav-item">
+            <a class="btn btn-sm {% if mode == 'report' %}btn-active{% else %}btn-outline-light{% endif %}" href="/report">
+                <i class="bi bi-file-earmark-text me-1"></i> Report
+            </a>
+            </li>
+
+            <!-- Report Explorer -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report_explorer">
+                <i class="bi bi-folder2-open me-1"></i> Report Explorer
+            </a>
+            </li>
+
+            <!-- APEX Uploader -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/apex_uploader">
+                <i class="bi bi-arrow-down-up me-1"></i> Apex Uploader
+            </a>
+            </li>
+
+            <!-- APEX Requester -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/apex_requester">
+                <i class="bi bi-arrow-down me-1"></i> Apex Requester
+            </a>
+            </li>
+            </ul>
+        </div>
+        </div>
+  </nav>
+
+  <main>
+    <div class="container mt-3">
+      <!-- === PAGE TITLE === -->
+      <h1 class="mb-4">
+        {% if mode == 'full' %}
+          <i class="bi bi-stack me-2"></i> Full Data Extractor
+        {% elif mode == 'report' %}
+          <i class="bi bi-file-earmark-text me-2"></i> Report Data Extractor
+        {% else %}
+          <i class="bi bi-bar-chart-fill me-2"></i> Performance Data Extractor
+        {% endif %}
+      </h1>
+
+      <p class="text-muted mb-4">
+        {% if mode == 'full' %}
+          Aplikasi untuk menghasilkan data APEX lengkap.
+        {% elif mode == 'report' %}
+          Aplikasi untuk menghasilkan data versi ringkas untuk laporan harian.
+        {% else %}
+          Aplikasi untuk menghasilkan data Excel yang digunakan pada laporan Performance di Power BI.
+        {% endif %}
+      </p>
+
+      <!-- === ACCORDION: CARA PENGGUNAAN === -->
+      <div class="accordion mb-4" id="accordionUsage">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingUsage">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapseUsage" aria-expanded="false" aria-controls="collapseUsage">
+              <i class="bi bi-question-circle me-2"></i> Cara Penggunaan
+            </button>
+          </h2>
+          <div id="collapseUsage" class="accordion-collapse collapse" aria-labelledby="headingUsage"
+               data-bs-parent="#accordionUsage">
+            <div class="accordion-body" tabindex="0">
+              <ol class="mb-0">
+                <li><b>Tambah Project</b> terlebih dahulu melalui kolom pencarian.</li>
+                <li><b>Pilih ID Account</b> yang sesuai dengan kebutuhan.</li>
+                <li>Aktifkan opsi <b>Include Late Reason</b> jika ingin menambahkan grouping Late Reason (FM / MM / LM Late).</li>
+                <li>Tentukan periode <b>Start</b> dan <b>End</b> sesuai kebutuhan.</li>
+                <li>Klik tombol <b>Run</b> untuk memulai proses data.</li>
+                <li><b>Tunggu</b> hingga proses selesai diproses oleh sistem.</li>
+                <li>Klik tombol <b>Download</b> untuk mengunduh file Excel hasil proses.</li>
+                {% if mode == 'full' %}
+                  <li>File Excel berisi semua kolom, cocok untuk <b>analisis detail</b>.</li>
+                {% elif mode == 'report' %}
+                  <li>File Excel hanya berisi kolom terpilih sesuai <b>template laporan harian</b>.</li>
+                {% else %}
+                  <li>File Excel siap dihubungkan ke <b>Power BI Performance</b>.</li>
+                {% endif %}
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+
+        <!-- === ACCORDION: TAMBAH PROJECT === -->
+    <div class="accordion mb-4" id="accordionProject">
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="headingProject">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                data-bs-target="#collapseProject" aria-expanded="false" aria-controls="collapseProject">
+            <i class="bi bi-plus-circle me-2"></i> Tambah Project
+        </button>
+        </h2>
+
+        <div id="collapseProject" class="accordion-collapse collapse"
+            aria-labelledby="headingProject" data-bs-parent="#accordionProject">
+        <div class="accordion-body">
+
+            <!-- Search Mode Toggle -->
+            <div class="mb-2 d-flex align-items-center gap-3">
+              <span class="fw-semibold">Cari berdasarkan:</span>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="search_mode" id="search_by_name" value="name" checked>
+                <label class="form-check-label" for="search_by_name">Nama Project</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="search_mode" id="search_by_id" value="id">
+                <label class="form-check-label" for="search_by_id">ID Account</label>
+              </div>
+            </div>
+
+            <!-- Input Project -->
+            <div class="mb-3 position-relative" style="z-index: 2500;">
+              <label for="project_input" class="form-label">
+                <i class="bi bi-search me-1"></i> <span id="search_label">Pilih Project:</span>
+              </label>
+              <input type="text" id="project_input" class="form-control"
+                     autocomplete="off" placeholder="Ketik nama project...">
+              <div id="project_suggestions" class="list-group"></div>
+            </div>
+
+            <!-- Checklist ID Account -->
+            <div id="account_checklist" class="mb-3" style="display:none;">
+            <label class="form-label d-flex align-items-center">
+                <i class="bi bi-card-checklist me-2"></i> ID Account & Customer:
+            </label>
+            <div class="border p-2 rounded-2 bg-white"></div>
+            </div>
+
+            <!-- Late Reason -->
+            <div class="form-check mb-3">
+            <input type="checkbox" class="form-check-input" id="late_reason">
+            <label for="late_reason" class="form-check-label">
+                <i class="bi bi-alarm me-1"></i> Include Late Reason
+            </label>
+            </div>
+
+            <!-- Add Button -->
+            <button class="btn btn-success mb-2" id="add_to_list">
+            <i class="bi bi-plus-circle me-1"></i> Add to List
+            </button>
+
+        </div>
+        </div>
+    </div>
+    </div>
+
+      <!-- === ACCORDION: PILIH SOURCE === -->
+      <div class="accordion mb-4" id="accordionSource">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="headingSource">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapseSource" aria-expanded="false" aria-controls="collapseSource">
+              <i class="bi bi-database-fill me-2"></i> Source: <span class="px-2" id="selected_source_label">Parquet</span>
+            </button>
+          </h2>
+          <div id="collapseSource" class="accordion-collapse collapse"
+               aria-labelledby="headingSource" data-bs-parent="#accordionSource">
+            <div class="accordion-body">
+              <ul class="nav nav-pills nav-fill source-subnav" id="sourceSubNav" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link"
+                    id="from-csv-tab"
+                    data-source="csv"
+                    data-bs-toggle="pill"
+                    data-bs-target="#from-csv"
+                    type="button"
+                    role="tab"
+                    aria-controls="from-csv"
+                    aria-selected="false"
+                  >
+                    <i class="bi bi-filetype-csv me-1"></i>
+                    CSV
+                  </button>
+                </li>
+
+                <li class="nav-item" role="presentation">
+                  <button
+                    class="nav-link active"
+                    id="from-parquet-tab"
+                    data-source="parquet"
+                    data-bs-toggle="pill"
+                    data-bs-target="#from-parquet"
+                    type="button"
+                    role="tab"
+                    aria-controls="from-parquet"
+                    aria-selected="true"
+                  >
+                    <i class="bi bi-file-earmark-binary me-1"></i>
+                    Parquet
+                  </button>
+                </li>
+              </ul>
+
+              <div class="tab-content" id="sourceSubNavContent">
+                <div class="tab-pane fade" id="from-csv" role="tabpanel" aria-labelledby="from-csv-tab" tabindex="0">
+                </div>
+                <div class="tab-pane fade show active" id="from-parquet" role="tabpanel" aria-labelledby="from-parquet-tab" tabindex="0">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- === FORM: RUN PROCESSING === -->
+    <h2 class="fw-bold mb-3 d-flex align-items-center">
+      <i class="bi bi-play-circle-fill text-primary me-2"></i>Run Processing
+    </h2>
+
+    <div class="border rounded-3 p-4 shadow-sm bg-light">
+      <form id="run_form" method="POST"
+            action="{% if mode == 'full' %}/full{% elif mode == 'report' %}/report{% else %}/run{% endif %}">
+        <div class="row g-3 align-items-center">
+
+          <!-- 🔸 Periode -->
+          <div class="col-md-6 col-lg-4">
+            <label class="form-label fw-semibold"><i class="bi bi-calendar3"></i> Periode</label>
+            <div class="d-flex align-items-center gap-2">
+              <input id="date_range" type="text" class="form-control form-control-sm" aria-label="Date range" placeholder="YYYY-MM-DD - YYYY-MM-DD">
+            </div>
+          </div>
+
+          {% if mode == "full" %}
+          <!-- 🔸 Filter Status -->
+          <div class="col-md-4 col-lg-3">
+            <label for="project_status_input" class="form-label fw-semibold">
+              <i class="bi bi-funnel-fill text-secondary me-1"></i> Status
+            </label>
+            <select class="form-select" id="project_status_input" name="project_status">
+              <option value="" selected>All</option>
+              <option value="open">Open</option>
+              <option value="close">Close</option>
+            </select>
+          </div>
+
+          <!-- 🔸 Filter Kategori -->
+          <div class="col-md-8 col-lg-5">
+            <label for="category_select" class="form-label fw-semibold">
+              <i class="bi bi-tags-fill text-secondary me-1"></i> Category
+              <span class="text-muted small">(multiple)</span>
+            </label>
+            <select id="category_select" class="form-select" multiple size="5"
+                    style="min-width: 200px;" name="filter_categories">
+              <option value="AGGREGATOR">AGGREGATOR</option>
+              <option value="BANKING">BANKING</option>
+              <option value="LAZADA">LAZADA</option>
+              <option value="MARKETPLACE">MARKETPLACE</option>
+              <option value="MENGANTAR">MENGANTAR</option>
+              <option value="NON BIG">NON BIG</option>
+              <option value="SCA">SCA</option>
+              <option value="SHOPEE">SHOPEE</option>
+              <option value="TIKTOK">TIKTOK</option>
+              <option value="TOPED">TOPED</option>
+            </select>
+          </div>
+          {% endif %}
+
+          <!-- 🔸 Buttons -->
+          <div class="col-12 mt-3 d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary px-4" id="run_button" disabled>
+              <i class="bi bi-play-fill me-1"></i> Run
+            </button>
+            <button type="button" class="btn btn-success px-4" id="download_button" style="display:none;">
+              <i class="bi bi-download me-1"></i> Download
+            </button>
+          </div>
+        </div>
+
+        <!-- Hidden Inputs -->
+        <input type="hidden" name="start" id="start_yy_mm">
+        <input type="hidden" name="end" id="end_yy_mm">
+        <input type="hidden" name="project_lists_json" id="project_lists_input">
+        <input type="hidden" id="filter_categories_input" name="filter_categories_json">
+
+        <div id="notif_area" class="mt-3"></div>
+
+        <!-- 🔸 Progress Bar -->
+        <div class="progress mt-3" style="height: 28px;">
+          <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success fw-semibold"
+              role="progressbar" style="width: 0%">0%</div>
+        </div>
+      </form>
+    </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">
+            <i class="bi bi-info-circle me-1"></i> {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+      {% endwith %}
+
+      <!-- === LIST PROJECT === -->
+      <h2 class="mt-4"><i class="bi bi-list-check me-2"></i> Daftar Project</h2>
+      <table class="table table-bordered" id="project_list_table">
+        <thead>
+          <tr>
+            <th><i class="bi bi-diagram-3"></i> Project</th>
+            <th><i class="bi bi-hash"></i> ID Account</th>
+            <th><i class="bi bi-person"></i> Nama Customer</th>
+            <th><i class="bi bi-clock-history"></i> Include Late Reason</th>
+            <th><i class="bi bi-gear"></i> Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="project_list_body"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- === FOOTER === -->
+  <footer>
+    <small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small>
+  </footer>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+  <script>
+    window.projects = {{ projects_json|tojson | safe }};
+    window.mode = "{{ mode }}";
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
