@@ -20,6 +20,7 @@ from waitress import serve
 from scripts.utils import auto_update_project_reference
 from scripts.apex_query import ApexQueryJob
 from scripts.lists import criteria_lists
+from scripts import backup_syncer
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -707,48 +708,66 @@ def list_reports():
             "trial BOT"
         )
         
-        if not os.path.exists(report_path):
-            return jsonify({"files": [], "path": report_path, "exists": False})
-        
+        # ── Try network path ──────────────────────────────────────────────
+        network_ok = os.path.exists(report_path)
         files = []
         tags = set()
+        from_backup = False
 
-        def add_file_entry(file_path, tag, rel_path):
-            modified_time = os.path.getmtime(file_path)
-            modified_dt = datetime.datetime.fromtimestamp(modified_time)
-            files.append({
-                "name": os.path.basename(file_path),
-                "size": os.path.getsize(file_path),
-                "modified": modified_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                "modified_ts": modified_time,
-                "tag": tag,
-                "rel_path": rel_path.replace("\\", "/")
-            })
-            tags.add(tag)
+        if network_ok:
+            def add_file_entry(file_path, tag, rel_path):
+                modified_time = os.path.getmtime(file_path)
+                modified_dt = datetime.datetime.fromtimestamp(modified_time)
+                files.append({
+                    "name": os.path.basename(file_path),
+                    "size": os.path.getsize(file_path),
+                    "modified": modified_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "modified_ts": modified_time,
+                    "tag": tag,
+                    "rel_path": rel_path.replace("\\", "/"),
+                    "from_backup": False,
+                })
+                tags.add(tag)
 
-        for entry in os.scandir(report_path):
-            if entry.is_file():
-                if entry.name.startswith('~$'):
-                    continue
-                add_file_entry(entry.path, "UNKNOWN", entry.name)
-            elif entry.is_dir():
-                tag = entry.name
-                for item in os.scandir(entry.path):
-                    if not item.is_file():
+            for entry in os.scandir(report_path):
+                if entry.is_file():
+                    if entry.name.startswith('~$'):
                         continue
-                    if item.name.startswith('~$'):
-                        continue
-                    rel_path = os.path.join(tag, item.name)
-                    add_file_entry(item.path, tag, rel_path)
-        
-        # Sort by modified date descending (newest first)
-        files.sort(key=lambda x: x["modified_ts"], reverse=True)
-        
+                    add_file_entry(entry.path, "UNKNOWN", entry.name)
+                elif entry.is_dir():
+                    tag = entry.name
+                    for item in os.scandir(entry.path):
+                        if not item.is_file():
+                            continue
+                        if item.name.startswith('~$'):
+                            continue
+                        rel_path = os.path.join(tag, item.name)
+                        add_file_entry(item.path, tag, rel_path)
+
+            # Sort by modified date descending (newest first)
+            files.sort(key=lambda x: x["modified_ts"], reverse=True)
+
+        # ── Fallback to local backup when network is unavailable/empty ────
+        if not files:
+            backup_files = backup_syncer.get_backup_file_list(date_obj.date())
+            if backup_files:
+                files = backup_files
+                tags = {f["tag"] for f in files}
+                from_backup = True
+                app.logger.info(
+                    f"[report_explorer] Network returned 0 files for {date_str}; "
+                    f"serving {len(files)} file(s) from local backup."
+                )
+
+        if not network_ok and not files:
+            return jsonify({"files": [], "path": report_path, "exists": False, "from_backup": False})
+
         return jsonify({
             "files": files,
             "tags": sorted(tags),
             "path": report_path,
-            "exists": True
+            "exists": network_ok,
+            "from_backup": from_backup,
         })
     
     except Exception as e:
@@ -921,13 +940,22 @@ def download_reports():
             file_path = safe_join(file_rel)
             if file_path and file_path.exists():
                 return send_file(file_path, as_attachment=True, download_name=os.path.basename(file_rel))
+            # Fallback: try local backup
+            backup_path = backup_syncer.resolve_backup_file(date_obj.date(), file_rel)
+            if backup_path:
+                return send_file(backup_path, as_attachment=True, download_name=os.path.basename(file_rel))
             return "File not found", 404
-        
+
         # Multiple files - create ZIP
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
             for file_name in file_names:
                 file_path = safe_join(file_name)
+                if not (file_path and file_path.exists()):
+                    # Fallback: try local backup
+                    bp = backup_syncer.resolve_backup_file(date_obj.date(), file_name)
+                    if bp:
+                        file_path = Path(bp)
                 if file_path and file_path.exists():
                     zf.write(file_path, arcname=os.path.basename(file_name))
         
@@ -1300,10 +1328,21 @@ def cancel_request(task_id):
     task["status"] = "cancelled"
     return jsonify({"success": True})
 
+@app.route("/backup_status", methods=["GET"])
+def backup_status():
+    """Return current backup sync status (admin only)."""
+    if not is_admin_request():
+        return jsonify({"error": "Forbidden"}), 403
+    return jsonify(backup_syncer.get_status())
+
+
 if __name__ == "__main__":
     host = os.getenv("APP_HOST", "0.0.0.0")
     port = env_int("APP_PORT", 5000)
     threads = env_int("APP_THREADS", 100)
     auto_update_project_reference()
+    # Start periodic backup sync (every 5 minutes by default, env-configurable)
+    _backup_interval = env_int("BACKUP_SYNC_INTERVAL", 300)
+    backup_syncer.start_periodic_sync(REPORT_EXPLORER_BASE, interval_seconds=_backup_interval)
     print(f"Server running on http://{host}:{port}")
     serve(app, host=host, port=port, threads=threads)

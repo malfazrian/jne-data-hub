@@ -315,6 +315,24 @@
 
       <!-- Recently Downloaded Section -->
 
+      <!-- Backup Notice Banner: network truly unreachable -->
+      <div id="backupBannerOffline" class="alert alert-danger align-items-center gap-2 mb-3" style="display:none;">
+        <i class="bi bi-wifi-off fs-5"></i>
+        <div>
+          <strong>Jaringan tidak dapat diakses</strong> &mdash; Menampilkan file dari salinan lokal terakhir.
+          <span class="text-muted" id="backupBannerOfflineTime"></span>
+        </div>
+      </div>
+
+      <!-- Backup Notice Banner: network ok but date folder empty -->
+      <div id="backupBannerEmpty" class="alert alert-warning align-items-center gap-2 mb-3" style="display:none;">
+        <i class="bi bi-archive-fill fs-5"></i>
+        <div>
+          <strong>Belum ada file di jaringan untuk tanggal ini</strong> &mdash; Menampilkan salinan lokal terakhir.
+          <span class="text-muted" id="backupBannerEmptyTime"></span>
+        </div>
+      </div>
+
       <!-- Action Bar -->
       <div class="action-bar mb-3" id="actionBar" style="display: none;">
         <div class="d-flex justify-content-between align-items-center">
@@ -974,6 +992,8 @@
       loadingIndicator.style.display = 'block';
       fileList.innerHTML = '';
       emptyState.style.display = 'none';
+      document.getElementById('backupBannerOffline').style.display = 'none';
+      document.getElementById('backupBannerEmpty').style.display = 'none';
       selectedFiles.clear();
       updateActionBar();
       
@@ -986,6 +1006,25 @@
         renderTagSelect(availableTags);
         
         loadingIndicator.style.display = 'none';
+
+        // Show/hide backup notice banners
+        const bannerOffline = document.getElementById('backupBannerOffline');
+        const bannerEmpty   = document.getElementById('backupBannerEmpty');
+        bannerOffline.style.display = 'none';
+        bannerEmpty.style.display   = 'none';
+
+        if (data.from_backup && allFiles.length > 0) {
+          const lastCopy = allFiles[0] ? `(terakhir disalin: ${allFiles[0].modified})` : '';
+          if (!data.exists) {
+            // Network path itself not found
+            bannerOffline.style.display = 'flex';
+            document.getElementById('backupBannerOfflineTime').textContent = lastCopy;
+          } else {
+            // Network path found but no files for this date
+            bannerEmpty.style.display = 'flex';
+            document.getElementById('backupBannerEmptyTime').textContent = lastCopy;
+          }
+        }
         
         if (allFiles.length === 0) {
           emptyState.style.display = 'block';
@@ -1002,6 +1041,8 @@
         console.error('Error loading files:', error);
         loadingIndicator.style.display = 'none';
         emptyState.style.display = 'block';
+        document.getElementById('backupBannerOffline').style.display = 'none';
+        document.getElementById('backupBannerEmpty').style.display = 'none';
         alert('Gagal memuat file. Pastikan path tersedia.');
       }
     }
