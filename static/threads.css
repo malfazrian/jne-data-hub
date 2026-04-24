@@ -1,0 +1,144 @@
+/* ═══════════════════════════════════════
+   THREADS – Custom CSS
+═══════════════════════════════════════ */
+
+/* Composer strip hover */
+#composerStrip:hover {
+  box-shadow: 0 4px 16px rgba(0, 45, 114, 0.15);
+  border-color: #c0cfe8;
+}
+#composerStrip:hover .bi-pencil-square {
+  color: var(--primary-blue) !important;
+}
+
+/* Thread card */
+.thread-card {
+  background: #fff;
+  border: 1px solid #e4e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 45, 114, 0.06);
+  transition: box-shadow 0.2s;
+}
+.thread-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 45, 114, 0.12);
+}
+
+/* Avatars */
+.thread-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.thread-avatar-sm {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.thread-avatar-xs {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.thread-avatar-placeholder,
+.thread-avatar-sm-placeholder,
+.thread-avatar-xs-placeholder {
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #002D72, #247fff);
+  flex-shrink: 0;
+  user-select: none;
+}
+.thread-avatar-placeholder {
+  width: 44px;
+  height: 44px;
+  font-size: 1.1rem;
+}
+.thread-avatar-sm-placeholder {
+  width: 34px;
+  height: 34px;
+  font-size: 0.9rem;
+}
+.thread-avatar-xs-placeholder {
+  width: 26px;
+  height: 26px;
+  font-size: 0.75rem;
+}
+
+/* Thread image */
+.thread-img {
+  max-height: 300px;
+  width: auto;
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+/* Action buttons */
+.thread-actions .btn-link {
+  text-decoration: none;
+  font-size: 0.85rem;
+  color: #6c757d;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.thread-actions .btn-link:hover,
+.thread-actions .btn-link.liked {
+  color: #D62828;
+}
+.thread-actions .bi-heart-fill {
+  color: #D62828;
+}
+
+/* Liked state for comment hearts */
+.like-btn.liked i,
+.like-btn.liked .bi {
+  color: #D62828;
+}
+.like-btn {
+  text-decoration: none;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.like-btn:hover {
+  color: #D62828 !important;
+}
+
+/* Topic badge */
+.badge.bg-primary {
+  background: linear-gradient(135deg, #002D72, #247fff) !important;
+  font-size: 0.7rem;
+  font-weight: 500;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+/* Thread text */
+.thread-text {
+  white-space: pre-line;
+  line-height: 1.55;
+}
+
+/* Separator line left (nested comments) */
+.border-start {
+  border-left: 3px solid #e4e8f0 !important;
+}
+
+/* Fade-in animation for new items */
+@keyframes threadFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.thread-card.new-item {
+  animation: threadFadeIn 0.3s ease forwards;
+}

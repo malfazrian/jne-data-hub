@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thread – CCC DS Data Hub</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='threads.css') }}">
+</head>
+<body class="h-100">
+
+  <!-- === NAVBAR === -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}"
+             alt="JNE Logo" width="50" height="50" class="me-2 d-inline-block align-middle">
+        CCC DS Data Hub
+      </a>
+      <button class="navbar-toggler bg-light" type="button" data-bs-toggle="collapse"
+              data-bs-target="#navbarNav" aria-controls="navbarNav" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/hub"><i class="bi bi-chat-square-text-fill me-1"></i> Hub</a>
+          </li><!-- Performance Mode -->
+        <li class="nav-item me-2">
+        <a class="btn btn-sm btn-outline-light" href="/">
+            <i class="bi bi-bar-chart-fill me-1"></i> Performance
+        </a>
+        </li>
+
+        <!-- Full Mode -->
+        <li class="nav-item me-2">
+        <a class="btn btn-sm btn-outline-light" href="/full">
+            <i class="bi bi-stack me-1"></i> Full Data
+        </a>
+        </li>
+
+        <!-- Report Mode -->
+        <li class="nav-item">
+        <a class="btn btn-sm btn-outline-light" href="/report">
+            <i class="bi bi-file-earmark-text me-1"></i> Report
+        </a>
+        </li>
+
+        <!-- Report Explorer -->
+        <li class="nav-item">
+        <a class="btn btn-sm btn-outline-light" href="/report_explorer">
+            <i class="bi bi-folder2-open me-1"></i> Report Explorer
+        </a>
+        </li>
+
+        <!-- APEX Uploader -->
+        <li class="nav-item">
+        <a class="btn btn-sm btn-outline-light" href="/apex_uploader">
+            <i class="bi bi-arrow-down-up me-1"></i> Apex Uploader
+        </a>
+        </li>
+
+        <!-- APEX Requester -->
+        <li class="nav-item me-2">
+        <a class="btn btn-sm btn-outline-light" href="/apex_requester">
+            <i class="bi bi-arrow-down me-1"></i> Apex Requester
+        </a>
+        </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-4">
+    <div class="container">
+
+      <div class="mb-3">
+        <a href="/hub" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i> Kembali
+        </a>
+      </div>
+
+      <!-- Thread Card -->
+      <div class="thread-card mb-3" id="mainThread">
+        <div class="d-flex gap-3">
+          <div class="flex-shrink-0">
+            {% if thread.author_pic %}
+            <img src="{{ thread.author_pic }}"
+                 class="thread-avatar" alt="avatar" onerror="this.style.display='none'">
+            {% else %}
+            <div class="thread-avatar-placeholder">
+              {{ thread.username_snapshot[0]|upper if thread.username_snapshot else '?' }}
+            </div>
+            {% endif %}
+          </div>
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <span class="fw-bold">{{ thread.username_snapshot }}</span>
+                {% if thread.topic %}
+                <i class="bi bi-chevron-right"></i>
+                <span>{{ thread.topic }}</span>
+                {% endif %}
+                <span class="text-muted small ms-2 thread-time" data-ts="{{ thread.created_at }}"></span>
+              </div>
+              {% if current_ip == thread.user_ip %}
+              <div class="dropdown">
+                <button class="btn btn-link btn-sm p-0 text-muted" data-bs-toggle="dropdown">
+                  <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><button class="dropdown-item" onclick="openEditThread()"><i class="bi bi-pencil me-2"></i>Edit</button></li>
+                  <li><button class="dropdown-item text-danger" onclick="deleteThread('{{ thread.thread_id }}')"><i class="bi bi-trash me-2"></i>Hapus</button></li>
+                </ul>
+              </div>
+              {% endif %}
+            </div>
+            <p class="mt-2 mb-2 thread-text">{{ thread.text }}</p>
+            {% if thread.image_path %}
+            <img src="{{ url_for('threads.thread_image', filename=thread.image_path.split('/')[-1]) }}"
+                 class="img-fluid rounded mb-2 thread-img" alt="thread image">
+            {% endif %}
+            <div class="d-flex gap-3 mt-2 thread-actions">
+              <button class="btn btn-link btn-sm p-0 text-muted like-btn {% if thread.thread_id in liked_ids %}liked{% endif %}"
+                      data-id="{{ thread.thread_id }}" data-kind="thread" onclick="toggleLike(this)">
+                <i class="bi {% if thread.thread_id in liked_ids %}bi-heart-fill text-danger{% else %}bi-heart{% endif %}"></i>
+                <span class="like-count">{{ thread.like_count }}</span>
+              </button>
+              <button class="btn btn-link btn-sm p-0 text-muted" onclick="copyShareUrl('{{ thread.thread_id }}')">
+                <i class="bi bi-share"></i>
+                <span>{{ thread.share_count }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr>
+
+      <!-- Comments section -->
+      <h6 class="text-muted mb-3"><i class="bi bi-chat-left-text me-1"></i>Komentar</h6>
+
+      <!-- Add comment form -->
+      <div class="thread-card mb-3" id="addCommentBox">
+        <form id="commentForm" enctype="multipart/form-data">
+          <input type="hidden" name="thread_id" value="{{ thread.thread_id }}">
+          <input type="hidden" id="parentCommentId" name="parent_comment_id" value="">
+          <div id="replyingToBar" class="d-none mb-2 small text-primary">
+            <i class="bi bi-reply me-1"></i>Membalas komentar…
+            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-2" onclick="cancelReply()">Batal</button>
+          </div>
+          <div class="d-flex gap-2 align-items-start">
+            <div class="flex-grow-1">
+              <textarea class="form-control" name="text" id="commentText" rows="2"
+                        placeholder="Tulis komentar…" required></textarea>
+            </div>
+            <div class="d-flex flex-column gap-1">
+              <label class="btn btn-outline-secondary btn-sm" title="Tambah gambar">
+                <i class="bi bi-image"></i>
+                <input type="file" name="image" id="commentImage" class="d-none"
+                       accept=".jpg,.jpeg,.png,.webp">
+              </label>
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-send"></i>
+              </button>
+            </div>
+          </div>
+          <div id="commentImagePreview" class="mt-2 d-none">
+            <img src="" class="img-fluid rounded" style="max-height:120px;" alt="preview" id="commentImgPreviewEl">
+            <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2" onclick="clearCommentImage()">
+              <i class="bi bi-x-circle"></i>
+            </button>
+          </div>
+          <div id="commentFormError" class="text-danger small mt-1 d-none"></div>
+        </form>
+      </div>
+
+      <!-- Comment list -->
+      <div id="commentList">
+        {% for comment in comments %}
+        <div class="thread-card mb-2 comment-item" id="cmt-{{ comment.comment_id }}" data-id="{{ comment.comment_id }}">
+          <div class="d-flex gap-2">
+            <div class="flex-shrink-0">
+              {% if comment.author_pic %}
+              <img src="{{ comment.author_pic }}" class="thread-avatar-sm" alt="avatar" onerror="this.style.display='none'">
+              {% else %}
+              <div class="thread-avatar-sm-placeholder">{{ comment.username_snapshot[0]|upper if comment.username_snapshot else '?' }}</div>
+              {% endif %}
+            </div>
+            <div class="flex-grow-1">
+              <div class="d-flex justify-content-between">
+                <div>
+                  <span class="fw-semibold small">{{ comment.username_snapshot }}</span>
+                  <span class="text-muted ms-2" style="font-size:0.75rem;" data-ts="{{ comment.created_at }}"></span>
+                </div>
+                {% if current_ip == comment.user_ip %}
+                <div class="dropdown">
+                  <button class="btn btn-link btn-sm p-0 text-muted" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    <li><button class="dropdown-item small" onclick="openEditComment('{{ comment.comment_id }}', this)"><i class="bi bi-pencil me-1"></i>Edit</button></li>
+                    <li><button class="dropdown-item small text-danger" onclick="deleteComment('{{ comment.comment_id }}')"><i class="bi bi-trash me-1"></i>Hapus</button></li>
+                  </ul>
+                </div>
+                {% endif %}
+              </div>
+              <p class="mb-1 mt-1 small comment-text-{{ comment.comment_id }}">{{ comment.text }}</p>
+              {% if comment.image_path %}
+              <img src="{{ url_for('threads.thread_image', filename=comment.image_path.split('/')[-1]) }}"
+                   class="img-fluid rounded mb-1" style="max-height:150px;" alt="image">
+              {% endif %}
+              <div class="d-flex gap-3 mt-1">
+                <button class="btn btn-link btn-sm p-0 text-muted like-btn {% if comment.comment_id in liked_ids %}liked{% endif %}"
+                        data-id="{{ comment.comment_id }}" data-kind="comment" onclick="toggleLike(this)">
+                  <i class="bi {% if comment.comment_id in liked_ids %}bi-heart-fill text-danger{% else %}bi-heart{% endif %}"></i>
+                  <span class="like-count">{{ comment.like_count }}</span>
+                </button>
+                <button class="btn btn-link btn-sm p-0 text-muted" onclick="setReply('{{ comment.comment_id }}', '{{ comment.username_snapshot }}')">
+                  <i class="bi bi-reply"></i> Balas
+                </button>
+              </div>
+
+              <!-- Nested replies -->
+              {% if comment.replies %}
+              <div class="ms-3 mt-2 border-start ps-3">
+                {% for reply in comment.replies %}
+                <div class="mb-2 comment-item" id="cmt-{{ reply.comment_id }}" data-id="{{ reply.comment_id }}">
+                  <div class="d-flex gap-2">
+                    <div class="flex-shrink-0">
+                      {% if reply.author_pic %}
+                      <img src="{{ reply.author_pic }}" class="thread-avatar-xs" alt="avatar" onerror="this.style.display='none'">
+                      {% else %}
+                      <div class="thread-avatar-xs-placeholder">{{ reply.username_snapshot[0]|upper if reply.username_snapshot else '?' }}</div>
+                      {% endif %}
+                    </div>
+                    <div class="flex-grow-1">
+                      <div class="d-flex justify-content-between">
+                        <span class="fw-semibold" style="font-size:0.8rem;">{{ reply.username_snapshot }}</span>
+                        {% if current_ip == reply.user_ip %}
+                        <div class="dropdown">
+                          <button class="btn btn-link btn-sm p-0 text-muted" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+                          <ul class="dropdown-menu dropdown-menu-end">
+                            <li><button class="dropdown-item small" onclick="openEditComment('{{ reply.comment_id }}', this)"><i class="bi bi-pencil me-1"></i>Edit</button></li>
+                            <li><button class="dropdown-item small text-danger" onclick="deleteComment('{{ reply.comment_id }}')"><i class="bi bi-trash me-1"></i>Hapus</button></li>
+                          </ul>
+                        </div>
+                        {% endif %}
+                      </div>
+                      <p class="mb-1 mt-1 small comment-text-{{ reply.comment_id }}">{{ reply.text }}</p>
+                      {% if reply.image_path %}
+                      <img src="{{ url_for('threads.thread_image', filename=reply.image_path.split('/')[-1]) }}"
+                           class="img-fluid rounded mb-1" style="max-height:150px;" alt="image">
+                      {% endif %}
+                      <div class="d-flex gap-3 mt-1">
+                        <button class="btn btn-link btn-sm p-0 text-muted like-btn {% if reply.comment_id in liked_ids %}liked{% endif %}"
+                                data-id="{{ reply.comment_id }}" data-kind="comment" onclick="toggleLike(this)">
+                          <i class="bi {% if reply.comment_id in liked_ids %}bi-heart-fill text-danger{% else %}bi-heart{% endif %}"></i>
+                          <span class="like-count">{{ reply.like_count }}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-4" id="noComments">
+          <i class="bi bi-chat-dots display-5"></i>
+          <p class="mt-2 small">Belum ada komentar.</p>
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </main>
+
+  <!-- MODAL: Edit Thread -->
+  <div class="modal fade" id="editThreadModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit Thread</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="editThreadForm" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Text</label>
+              <textarea class="form-control" id="editThreadText" name="text" rows="4"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Topic</label>
+              <input type="text" class="form-control" id="editThreadTopic" name="topic">
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Ganti Image</label>
+              <input type="file" class="form-control" name="image" accept=".jpg,.jpeg,.png,.webp">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button class="btn btn-primary" id="btnEditThreadSave">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Profile Setup -->
+  <div class="modal fade" id="profileModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-person-circle me-2"></i>Set Up Your Profile</h5>
+        </div>
+        <div class="modal-body">
+          <form id="profileForm" enctype="multipart/form-data">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Username <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="profileUsername" name="username"
+                     maxlength="50" placeholder="Masukkan username…" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Profile Picture</label>
+              <input type="file" class="form-control" name="profile_pic" accept=".jpg,.jpeg,.png,.webp">
+            </div>
+            <div id="profileFormError" class="text-danger small d-none"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btnProfileCancel">Nanti saja</button>
+          <button class="btn btn-primary" id="btnProfileSave">Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+    <div id="appToast" class="toast align-items-center text-bg-dark border-0" role="alert">
+      <div class="d-flex">
+        <div class="toast-body" id="appToastBody"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    window.THREADS_CONFIG = {
+      apiBase:    "/api",
+      currentIp:  "{{ current_ip }}",
+      user:       {{ (user | tojson) if user else 'null' }},
+      threadId:   "{{ thread.thread_id }}",
+      threadOwnIp: "{{ thread.user_ip }}",
+      threadText: {{ thread.text | tojson }},
+      threadTopic: {{ thread.topic | tojson }},
+    };
+  </script>
+  <script src="{{ url_for('static', filename='threads.js') }}"></script>
+  <script src="{{ url_for('static', filename='thread_detail.js') }}"></script>
+</body>
+</html>

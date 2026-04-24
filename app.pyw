@@ -49,11 +49,13 @@ from routes.performance    import performance_bp
 from routes.report_explorer import report_explorer_bp
 from routes.apex_uploader  import apex_uploader_bp
 from routes.apex_requester import apex_requester_bp
+from routes.thread_routes  import thread_bp
 
 app.register_blueprint(performance_bp)
 app.register_blueprint(report_explorer_bp)
 app.register_blueprint(apex_uploader_bp)
 app.register_blueprint(apex_requester_bp)
+app.register_blueprint(thread_bp)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

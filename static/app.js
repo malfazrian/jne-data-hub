@@ -88,6 +88,7 @@ $('input[name="search_mode"]').on('change', function() {
   $projectInput.val('');
   $projectSuggestions.empty().hide();
   $accountChecklistWrapper.hide();
+  $('#unselect_all_accounts').hide();
 });
 
 function filterProjectsById(query) {
@@ -193,6 +194,12 @@ $projectInput.on('change', () => {
         `);
     });
     $accountChecklistWrapper.show();
+    $('#unselect_all_accounts').show();
+});
+
+// Unselect All
+$('#unselect_all_accounts').on('click', () => {
+    $accountChecklistDiv.find('input[type="checkbox"]').prop('checked', false);
 });
 
 // Add ke list
@@ -232,6 +239,7 @@ $addButton.on('click', () => {
     $projectInput.val('');
     $accountChecklistDiv.empty();
     $accountChecklistWrapper.hide();
+    $('#unselect_all_accounts').hide();
     $lateReasonCheckbox.prop('checked', false);
 });
 
@@ -262,6 +270,7 @@ function editProject(idx) {
         `);
     });
     $accountChecklistWrapper.show();
+    $('#unselect_all_accounts').show();
 
     // --- Open accordion Tambah Project jika belum terbuka ---
     const collapseEl = document.getElementById('collapseProject');
