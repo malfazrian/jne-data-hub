@@ -467,6 +467,32 @@ def get_comments(thread_id: str) -> list:
         con.close()
 
 
+def get_replies(comment_id: str) -> list:
+    """Return all replies (children) for a given top-level comment, oldest first."""
+    partitions = _all_existing_partitions("comments")
+    if not partitions:
+        return []
+    glob_str = "', '".join([_esc(p) for p in partitions])
+    con = _conn()
+    try:
+        rows = con.execute(
+            f"""
+            SELECT * FROM read_parquet(['{glob_str}'])
+            WHERE parent_comment_id = ?
+            ORDER BY created_at ASC
+            """,
+            [comment_id]
+        ).fetchdf()
+        if rows.empty:
+            return []
+        result = rows.to_dict(orient="records")
+        for r in result:
+            r["created_at"] = str(r["created_at"])
+        return result
+    finally:
+        con.close()
+
+
 def delete_comment(comment_id: str, user_ip: str) -> bool:
     for p in _all_existing_partitions("comments"):
         fname = os.path.basename(p).replace("comments_", "").replace(".parquet", "")

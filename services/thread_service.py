@@ -104,12 +104,16 @@ def add_comment(thread_id, user_ip, username, text,
 
 def list_comments(thread_id):
     raw = ss.get_comments(thread_id)
-    # Nest: build top-level and replies
+    # Nest: build top-level and count replies (replies are lazy-loaded on demand)
     top_level = [c for c in raw if not c.get("parent_comment_id")]
     replies   = [c for c in raw if c.get("parent_comment_id")]
     for t in top_level:
-        t["replies"] = [r for r in replies if r["parent_comment_id"] == t["comment_id"]]
+        t["reply_count"] = sum(1 for r in replies if r["parent_comment_id"] == t["comment_id"])
     return top_level
+
+
+def get_replies(comment_id):
+    return ss.get_replies(comment_id)
 
 
 def remove_comment(comment_id, user_ip):

@@ -82,7 +82,7 @@
 
 /* Action buttons */
 .thread-actions .btn-link {
-  text-decoration: none;
+  text-decoration: none !important;
   font-size: 0.85rem;
   color: #6c757d;
   transition: color 0.15s;
@@ -142,3 +142,7 @@
 .thread-card.new-item {
   animation: threadFadeIn 0.3s ease forwards;
 }
+
+#commentText {
+  height: auto;
+} 

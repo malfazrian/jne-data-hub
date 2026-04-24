@@ -149,13 +149,16 @@ function appendComment(c, parentId) {
   if (parentId) {
     const parentCard = document.getElementById(`cmt-${parentId}`);
     if (parentCard) {
-      let replyContainer = parentCard.querySelector(".reply-container");
-      if (!replyContainer) {
-        replyContainer = document.createElement("div");
-        replyContainer.className = "reply-container ms-3 mt-2 border-start ps-3";
-        parentCard.querySelector(".flex-grow-1").appendChild(replyContainer);
+      // Increment reply count badge on the parent comment
+      const badge = parentCard.querySelector(".reply-count-badge");
+      if (badge) badge.textContent = parseInt(badge.textContent || "0") + 1;
+      // Add to the dedicated replies container
+      const replyContainer = document.getElementById(`replies-${parentId}`);
+      if (replyContainer) {
+        replyContainer.dataset.loaded = "1";
+        replyContainer.classList.remove("d-none");
+        replyContainer.appendChild(div);
       }
-      replyContainer.appendChild(div);
     } else {
       document.getElementById("commentList").appendChild(div);
     }
@@ -164,6 +167,75 @@ function appendComment(c, parentId) {
   }
   renderRelTimes();
 }
+
+/* ── Lazy-load replies ───────────────────────────────────────────────────── */
+
+window.toggleReplies = async function(commentId, btn) {
+  const container = document.getElementById(`replies-${commentId}`);
+  if (!container) return;
+
+  // Already loaded — just toggle visibility
+  if (container.dataset.loaded === "1") {
+    container.classList.toggle("d-none");
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const replies = await apiJSON(`/api/comment/${commentId}/replies`);
+    container.dataset.loaded = "1";
+    replies.forEach(r => {
+      const owned = (r.user_ip === CFG_D.currentIp);
+      const menuHtml = owned ? `
+        <div class="dropdown">
+          <button class="btn btn-link btn-sm p-0 text-muted" data-bs-toggle="dropdown"><i class="bi bi-three-dots"></i></button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><button class="dropdown-item small" onclick="openEditComment('${r.comment_id}', this)"><i class="bi bi-pencil me-1"></i>Edit</button></li>
+            <li><button class="dropdown-item small text-danger" onclick="deleteComment('${r.comment_id}')"><i class="bi bi-trash me-1"></i>Hapus</button></li>
+          </ul>
+        </div>` : "";
+      const imgHtml = r.image_url
+        ? `<img src="${r.image_url}" class="img-fluid rounded mb-1" style="max-height:150px;" alt="image">`
+        : "";
+      const avatarHtmlStr = r.avatar_url
+        ? `<img src="${r.avatar_url}" class="thread-avatar-xs" alt="avatar" onerror="this.style.display='none'">`
+        : `<div class="thread-avatar-xs-placeholder">${(r.username_snapshot||"?")[0].toUpperCase()}</div>`;
+      const likedClass = r.liked ? "liked" : "";
+      const heartIcon  = r.liked ? "bi-heart-fill text-danger" : "bi-heart";
+
+      const div = document.createElement("div");
+      div.className = "mb-2 comment-item";
+      div.id = `cmt-${r.comment_id}`;
+      div.dataset.id = r.comment_id;
+      div.innerHTML = `
+        <div class="d-flex gap-2">
+          <div class="flex-shrink-0">${avatarHtmlStr}</div>
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between">
+              <span class="fw-semibold" style="font-size:0.8rem;">${escHtml(r.username_snapshot)}</span>
+              ${menuHtml}
+            </div>
+            <p class="mb-1 mt-1 small comment-text-${r.comment_id}">${escHtml(r.text)}</p>
+            ${imgHtml}
+            <div class="d-flex gap-3 mt-1">
+              <button class="btn btn-link btn-sm p-0 text-muted like-btn ${likedClass}"
+                      data-id="${r.comment_id}" data-kind="comment" onclick="toggleLike(this)">
+                <i class="bi ${heartIcon}"></i>
+                <span class="like-count">${r.like_count}</span>
+              </button>
+            </div>
+          </div>
+        </div>`;
+      container.appendChild(div);
+    });
+    container.classList.remove("d-none");
+    renderRelTimes();
+  } catch(e) {
+    showToast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 /* ── Reply helper ────────────────────────────────────────────────────────── */
 

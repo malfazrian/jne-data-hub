@@ -167,6 +167,23 @@ def api_create_comment():
     return jsonify(comment), 201
 
 
+@thread_bp.route("/api/comment/<comment_id>/replies", methods=["GET"])
+def api_get_replies(comment_id):
+    ip = _get_ip()
+    replies = ts.get_replies(comment_id)
+    liked_ids = ts.get_user_liked_ids(ip)
+    _avatar_cache = {}
+    for r in replies:
+        tip = r["user_ip"]
+        if tip not in _avatar_cache:
+            u = ss.get_user(tip)
+            _avatar_cache[tip] = _image_url(u.get("profile_pic", "")) if u else ""
+        r["liked"]      = r["comment_id"] in liked_ids
+        r["image_url"]  = _image_url(r.get("image_path", ""))
+        r["avatar_url"] = _avatar_cache[tip]
+    return jsonify(replies)
+
+
 @thread_bp.route("/api/comment/<comment_id>", methods=["PUT"])
 def api_update_comment(comment_id):
     ip   = _get_ip()
