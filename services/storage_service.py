@@ -313,12 +313,14 @@ def get_threads(page: int = 1, per_page: int = 20, topic: str = "") -> dict:
         return {"threads": [], "total": 0, "page": page, "per_page": per_page}
 
     glob_str = "', '".join([_esc(p) for p in partitions])
-    topic_filter = f"AND topic = '{topic}'" if topic else ""
+    topic_filter = "AND topic ILIKE ?" if topic else ""
+    params = [f"%{topic}%"] if topic else []
 
     con = _conn()
     try:
         total = con.execute(
-            f"SELECT COUNT(*) FROM read_parquet(['{glob_str}']) WHERE 1=1 {topic_filter}"
+            f"SELECT COUNT(*) FROM read_parquet(['{glob_str}']) WHERE 1=1 {topic_filter}",
+            params
         ).fetchone()[0]
 
         offset = (page - 1) * per_page
@@ -328,7 +330,8 @@ def get_threads(page: int = 1, per_page: int = 20, topic: str = "") -> dict:
             WHERE 1=1 {topic_filter}
             ORDER BY created_at DESC
             LIMIT {per_page} OFFSET {offset}
-            """
+            """,
+            params
         ).fetchdf()
 
         threads = rows.to_dict(orient="records")
