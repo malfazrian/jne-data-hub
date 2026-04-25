@@ -333,6 +333,15 @@
       threadTopic: {{ thread.topic | tojson }},
     };
   </script>
+  <!-- Image Lightbox -->
+  <div id="imgLightbox" class="img-lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+    <button class="img-lightbox-close" id="lbClose" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    <button class="img-lightbox-nav img-lightbox-prev" id="lbPrev" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
+    <img class="img-lightbox-img" id="lbImg" src="" alt="">
+    <button class="img-lightbox-nav img-lightbox-next" id="lbNext" aria-label="Next"><i class="bi bi-chevron-right"></i></button>
+    <div class="img-lightbox-counter" id="lbCounter"></div>
+  </div>
+
   <script src="{{ url_for('static', filename='threads.js') }}"></script>
   <script src="{{ url_for('static', filename='thread_detail.js') }}"></script>
 </body>

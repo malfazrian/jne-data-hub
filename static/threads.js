@@ -528,3 +528,93 @@ function linkify(str) {
     url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
   );
 }
+
+/* ─── Image Lightbox ────────────────────────────────────────────────────── */
+
+(function () {
+  let _lbUrls  = [];
+  let _lbIndex = 0;
+
+  function lbShow(urls, index) {
+    _lbUrls  = urls;
+    _lbIndex = index;
+    _lbRender();
+    document.getElementById("imgLightbox")?.classList.add("active");
+    document.body.style.overflow = "hidden";
+  }
+
+  function lbHide() {
+    document.getElementById("imgLightbox")?.classList.remove("active");
+    document.body.style.overflow = "";
+  }
+
+  function _lbRender() {
+    const img     = document.getElementById("lbImg");
+    const counter = document.getElementById("lbCounter");
+    const prev    = document.getElementById("lbPrev");
+    const next    = document.getElementById("lbNext");
+    if (!img) return;
+    img.src = _lbUrls[_lbIndex] || "";
+    if (counter) counter.textContent = _lbUrls.length > 1 ? `${_lbIndex + 1} / ${_lbUrls.length}` : "";
+    if (prev) prev.disabled = (_lbIndex === 0);
+    if (next) next.disabled = (_lbIndex === _lbUrls.length - 1);
+    // Hide nav buttons when only one image
+    const showNav = _lbUrls.length > 1;
+    if (prev) prev.style.display = showNav ? "" : "none";
+    if (next) next.style.display = showNav ? "" : "none";
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const lb   = document.getElementById("imgLightbox");
+    const prev = document.getElementById("lbPrev");
+    const next = document.getElementById("lbNext");
+
+    document.getElementById("lbClose")?.addEventListener("click", lbHide);
+
+    // Click backdrop (not image or nav) to close
+    lb?.addEventListener("click", (e) => {
+      if (e.target === lb) lbHide();
+    });
+
+    prev?.addEventListener("click", () => {
+      if (_lbIndex > 0) { _lbIndex--; _lbRender(); }
+    });
+    next?.addEventListener("click", () => {
+      if (_lbIndex < _lbUrls.length - 1) { _lbIndex++; _lbRender(); }
+    });
+
+    // Keyboard navigation
+    document.addEventListener("keydown", (e) => {
+      if (!lb?.classList.contains("active")) return;
+      if (e.key === "Escape")      lbHide();
+      if (e.key === "ArrowLeft"  && _lbIndex > 0)                      { _lbIndex--; _lbRender(); }
+      if (e.key === "ArrowRight" && _lbIndex < _lbUrls.length - 1)    { _lbIndex++; _lbRender(); }
+    });
+
+    // Touch/swipe support
+    let _touchX = null;
+    lb?.addEventListener("touchstart", (e) => { _touchX = e.touches[0].clientX; }, { passive: true });
+    lb?.addEventListener("touchend", (e) => {
+      if (_touchX === null) return;
+      const dx = e.changedTouches[0].clientX - _touchX;
+      _touchX = null;
+      if (Math.abs(dx) < 40) return;
+      if (dx < 0 && _lbIndex < _lbUrls.length - 1) { _lbIndex++; _lbRender(); }
+      if (dx > 0 && _lbIndex > 0)                   { _lbIndex--; _lbRender(); }
+    }, { passive: true });
+
+    // Delegate: click on any .thread-img-thumb opens lightbox
+    document.addEventListener("click", (e) => {
+      const thumb = e.target.closest(".thread-img-thumb");
+      if (!thumb) return;
+      const strip = thumb.closest(".thread-img-scroll");
+      const imgs  = strip
+        ? Array.from(strip.querySelectorAll(".thread-img-thumb")).map(i => i.src)
+        : [thumb.src];
+      const idx   = strip
+        ? Array.from(strip.querySelectorAll(".thread-img-thumb")).indexOf(thumb)
+        : 0;
+      lbShow(imgs, idx);
+    });
+  });
+})();
