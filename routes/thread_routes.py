@@ -4,6 +4,7 @@ Flask blueprint for the Threads feature.
 """
 import os
 import json
+import urllib.parse
 from flask import (
     Blueprint, render_template, request, jsonify,
     send_from_directory, abort, url_for
@@ -15,6 +16,7 @@ thread_bp = Blueprint("threads", __name__)
 
 BASE_DIR      = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 THREAD_IMAGES = os.path.join(BASE_DIR, "data", "threads", "images")
+THREAD_FILES  = os.path.join(BASE_DIR, "data", "threads", "files")
 
 
 def _get_file(name: str):
@@ -35,6 +37,21 @@ def _parse_image_paths(path: str) -> list:
     return [path]
 
 
+def _parse_file_paths(raw: str) -> list:
+    """Parse file_path JSON list into a list of file info dicts."""
+    if not raw:
+        return []
+    try:
+        items = json.loads(raw)
+        result = []
+        for item in items:
+            if isinstance(item, dict) and item.get("path"):
+                result.append(item)
+        return result
+    except Exception:
+        return []
+
+
 def _image_urls(path: str) -> list:
     """Return a list of full URLs for the stored image_path value."""
     return [_image_url(p) for p in _parse_image_paths(path)]
@@ -45,6 +62,14 @@ def _image_urls(path: str) -> list:
 def thread_image(filename):
     return send_from_directory(THREAD_IMAGES, filename)
 
+@thread_bp.route("/data/hub/files/<path:filename>")
+def thread_file(filename):
+    # filename may be "<uuid.ext>/<original_name.ext>" (preferred) or just "<uuid.ext>"
+    parts = filename.split("/", 1)
+    real_file    = parts[0]
+    display_name = parts[1] if len(parts) > 1 else real_file
+    return send_from_directory(THREAD_FILES, real_file,
+                               as_attachment=True, download_name=display_name)
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 @thread_bp.route("/hub")
@@ -71,6 +96,7 @@ def thread_detail_page(thread_id):
     thread_author = ss.get_user(thread["user_ip"])
     thread["author_pic"]   = _image_url(thread_author.get("profile_pic", "")) if thread_author else ""
     thread["image_paths"]  = _parse_image_paths(thread.get("image_path", ""))
+    thread["file_items"]   = _file_items(thread.get("file_path", "") or "")
     comments = ts.list_comments(thread_id)
     # Resolve comment/reply author profile pics (one lookup per unique IP)
     _avatar_cache = {thread["user_ip"]: thread["author_pic"]}
@@ -81,6 +107,7 @@ def thread_detail_page(thread_id):
                 u = ss.get_user(tip)
                 _avatar_cache[tip] = _image_url(u.get("profile_pic", "")) if u else ""
             obj["author_pic"] = _avatar_cache[tip]
+        c["file_items"] = _file_items(c.get("file_path", "") or "")
     liked_ids = ts.get_user_liked_ids(ip)
     return render_template(
         "thread_detail.html",
@@ -115,6 +142,7 @@ def api_get_threads():
         t["share_url"]     = url_for("threads.thread_detail_page",
                                      thread_id=t["thread_id"], _external=True)
         t["image_urls"]    = _image_urls(t.get("image_path", ""))
+        t["file_items"]    = _file_items(t.get("file_path", ""))
         t["avatar_url"]    = _avatar_cache[t_ip]
         t["comment_count"] = comment_counts.get(t["thread_id"], 0)
     return jsonify(result)
@@ -133,12 +161,14 @@ def api_create_thread():
         return jsonify({"error": "Text is required."}), 400
 
     image_files = [f for f in request.files.getlist("images") if f and f.filename][:20]
-    thread, err = ts.create_thread(ip, user["username"], text, image_files, topic)
+    file_files  = [f for f in request.files.getlist("files")  if f and f.filename][:10]
+    thread, err = ts.create_thread(ip, user["username"], text, image_files, file_files, topic)
     if err:
         return jsonify({"error": err}), 400
-    thread["share_url"]  = url_for("threads.thread_detail_page",
-                                   thread_id=thread["thread_id"], _external=True)
-    thread["image_urls"] = _image_urls(thread.get("image_path", ""))
+    thread["share_url"]   = url_for("threads.thread_detail_page",
+                                    thread_id=thread["thread_id"], _external=True)
+    thread["image_urls"]  = _image_urls(thread.get("image_path", ""))
+    thread["file_items"]  = _file_items(thread.get("file_path", ""))
     return jsonify(thread), 201
 
 
@@ -148,12 +178,14 @@ def api_update_thread(thread_id):
     text  = (request.form.get("text") or "").strip() or None
     topic = request.form.get("topic")
     image_files = [f for f in request.files.getlist("images") if f and f.filename][:20]
-    ok, err = ts.edit_thread(thread_id, ip, text=text,
-                              image_files=image_files, topic=topic)
+    file_files  = [f for f in request.files.getlist("files")  if f and f.filename][:10]
+    ok, err = ts.edit_thread(thread_id, ip, text=text, image_files=image_files,
+                              file_files=file_files, topic=topic)
     if not ok:
         return jsonify({"error": err or "Not found"}), 404
     thread = ts.get_thread(thread_id)
     thread["image_urls"] = _image_urls(thread.get("image_path", ""))
+    thread["file_items"] = _file_items(thread.get("file_path", ""))
     return jsonify(thread)
 
 
@@ -178,15 +210,17 @@ def api_create_comment():
     text              = (request.form.get("text") or "").strip()
     parent_comment_id = (request.form.get("parent_comment_id") or "").strip()
     image_file        = _get_file("image")
+    file_file         = _get_file("file")
 
     if not thread_id or not text:
         return jsonify({"error": "thread_id and text are required."}), 400
 
     comment, err = ts.add_comment(thread_id, ip, user["username"],
-                                   text, parent_comment_id, image_file)
+                                   text, parent_comment_id, image_file, file_file)
     if err:
         return jsonify({"error": err}), 400
-    comment["image_url"] = _image_url(comment.get("image_path", ""))
+    comment["image_url"]  = _image_url(comment.get("image_path", ""))
+    comment["file_items"] = _file_items(comment.get("file_path", ""))
     return jsonify(comment), 201
 
 
@@ -203,6 +237,7 @@ def api_get_replies(comment_id):
             _avatar_cache[tip] = _image_url(u.get("profile_pic", "")) if u else ""
         r["liked"]      = r["comment_id"] in liked_ids
         r["image_url"]  = _image_url(r.get("image_path", ""))
+        r["file_items"] = _file_items(r.get("file_path", ""))
         r["avatar_url"] = _avatar_cache[tip]
     return jsonify(replies)
 
@@ -323,3 +358,26 @@ def _image_url(path: str) -> str:
     # path stored as "threads/images/<filename>"
     filename = os.path.basename(path)
     return url_for("threads.thread_image", filename=filename)
+
+
+def _file_items(raw: str) -> list:
+    """Parse file_path JSON into list of dicts with url, name, size."""
+    if not raw:
+        return []
+    try:
+        items = json.loads(raw)
+    except Exception:
+        return []
+    result = []
+    for item in (items if isinstance(items, list) else []):
+        if isinstance(item, dict) and item.get("path"):
+            fname      = os.path.basename(item["path"])
+            orig_name  = item.get("name", fname)
+            # Encode original name into URL path so download_name is preserved
+            safe_orig = urllib.parse.quote(orig_name, safe="")
+            result.append({
+                "url":  url_for("threads.thread_file", filename=f"{fname}/{safe_orig}"),
+                "name": orig_name,
+                "size": item.get("size", 0),
+            })
+    return result

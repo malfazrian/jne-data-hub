@@ -85,6 +85,10 @@ def ensure_users_parquet():
                     con.close()
 
 
+FILES_DIR = os.path.join(THREADS_DIR, "files")
+os.makedirs(FILES_DIR, exist_ok=True)
+
+
 def _thread_cols():
     return """
         thread_id         VARCHAR,
@@ -92,6 +96,7 @@ def _thread_cols():
         username_snapshot VARCHAR,
         text              VARCHAR,
         image_path        VARCHAR,
+        file_path         VARCHAR,
         topic             VARCHAR,
         created_at        TIMESTAMP,
         like_count        BIGINT,
@@ -108,6 +113,7 @@ def _comment_cols():
         username_snapshot VARCHAR,
         text              VARCHAR,
         image_path        VARCHAR,
+        file_path         VARCHAR,
         created_at        TIMESTAMP,
         like_count        BIGINT
     """
@@ -152,15 +158,19 @@ def _append_row(kind: str, dt: datetime.datetime, row: dict):
     _ensure_partition(kind, dt)
     path = _parquet_path(kind, dt)
 
-    cols         = ", ".join(row.keys())
-    params       = list(row.values())
-    placeholders = ", ".join(["?" for _ in params])
-
     with _get_lock(path):
         tmp = _tmp(path)
         con = _conn()
         try:
             con.execute(f"CREATE TABLE existing AS SELECT * FROM read_parquet('{_esc(path)}')")
+            # Add any columns present in the row but missing from old parquet partitions
+            existing_cols = {r[0] for r in con.execute("DESCRIBE existing").fetchall()}
+            for col in row.keys():
+                if col not in existing_cols:
+                    con.execute(f"ALTER TABLE existing ADD COLUMN {col} VARCHAR")
+            cols         = ", ".join(row.keys())
+            params       = list(row.values())
+            placeholders = ", ".join(["?" for _ in params])
             con.execute(f"INSERT INTO existing ({cols}) VALUES ({placeholders})", params)
             con.execute(f"COPY existing TO '{_esc(tmp)}' (FORMAT PARQUET)")
         finally:
@@ -289,7 +299,7 @@ def upsert_user(ip: str, username: str, profile_pic: Optional[str] = None) -> di
 # ══════════════════════════════════════════════════════════════════════════════
 
 def create_thread(user_ip: str, username: str, text: str,
-                  image_path: str = "", topic: str = "") -> dict:
+                  image_path: str = "", file_path: str = "", topic: str = "") -> dict:
     now = datetime.datetime.utcnow()
     row = {
         "thread_id":         str(uuid.uuid4()),
@@ -297,6 +307,7 @@ def create_thread(user_ip: str, username: str, text: str,
         "username_snapshot": username,
         "text":              text,
         "image_path":        image_path,
+        "file_path":         file_path,
         "topic":             topic,
         "created_at":        now,
         "like_count":        0,
@@ -320,14 +331,14 @@ def get_threads(page: int = 1, per_page: int = 20, topic: str = "") -> dict:
     con = _conn()
     try:
         total = con.execute(
-            f"SELECT COUNT(*) FROM read_parquet(['{glob_str}']) WHERE 1=1 {topic_filter}",
+            f"SELECT COUNT(*) FROM read_parquet(['{glob_str}'], union_by_name=TRUE) WHERE 1=1 {topic_filter}",
             params
         ).fetchone()[0]
 
         offset = (page - 1) * per_page
         rows = con.execute(
             f"""
-            SELECT * FROM read_parquet(['{glob_str}'])
+            SELECT * FROM read_parquet(['{glob_str}'], union_by_name=TRUE)
             WHERE 1=1 {topic_filter}
             ORDER BY created_at DESC
             LIMIT {per_page} OFFSET {offset}
@@ -351,7 +362,7 @@ def get_thread(thread_id: str) -> Optional[dict]:
     con = _conn()
     try:
         rows = con.execute(
-            f"SELECT * FROM read_parquet(['{glob_str}']) WHERE thread_id = ? LIMIT 1",
+            f"SELECT * FROM read_parquet(['{glob_str}'], union_by_name=TRUE) WHERE thread_id = ? LIMIT 1",
             [thread_id]
         ).fetchdf()
         if rows.empty:
@@ -371,13 +382,14 @@ def _get_thread_created_at(thread_id: str) -> Optional[datetime.datetime]:
 
 
 def update_thread(thread_id: str, user_ip: str, text: str = None,
-                  image_path: str = None, topic: str = None) -> bool:
+                  image_path: str = None, file_path: str = None, topic: str = None) -> bool:
     dt = _get_thread_created_at(thread_id)
     if not dt:
         return False
     updates = {}
     if text       is not None: updates["text"]       = text
     if image_path is not None: updates["image_path"] = image_path
+    if file_path  is not None: updates["file_path"]  = file_path
     if topic      is not None: updates["topic"]      = topic
     if not updates:
         return False
@@ -397,7 +409,7 @@ def delete_thread(thread_id: str, user_ip: str):
 
     dt = datetime.datetime.fromisoformat(thread["created_at"].replace("Z", ""))
 
-    # ── Collect image paths before deletion ───────────────────────────────
+    # ── Collect image paths and file paths before deletion ──────────────────
     image_paths = []
     raw_path = thread.get("image_path", "")
     if raw_path:
@@ -409,11 +421,33 @@ def delete_thread(thread_id: str, user_ip: str):
         else:
             image_paths.append(raw_path)
 
-    # collect comment/reply image paths (get_comments returns all rows for thread)
+    # collect thread file attachments
+    raw_file_path = thread.get("file_path", "") or ""
+    if raw_file_path.startswith("["):
+        try:
+            for f in json.loads(raw_file_path):
+                if isinstance(f, dict) and f.get("path"):
+                    image_paths.append(f["path"])
+                elif isinstance(f, str) and f:
+                    image_paths.append(f)
+        except json.JSONDecodeError:
+            pass
+
+    # collect comment/reply image paths and file paths
     for c in get_comments(thread_id):
         cp = c.get("image_path", "")
         if cp:
             image_paths.append(cp)
+        raw_cf = c.get("file_path", "") or ""
+        if raw_cf.startswith("["):
+            try:
+                for f in json.loads(raw_cf):
+                    if isinstance(f, dict) and f.get("path"):
+                        image_paths.append(f["path"])
+                    elif isinstance(f, str) and f:
+                        image_paths.append(f)
+            except json.JSONDecodeError:
+                pass
 
     # ── Delete thread row ─────────────────────────────────────────────────
     _rewrite_partition("threads", dt,
@@ -454,7 +488,8 @@ def increment_share(thread_id: str) -> bool:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def create_comment(thread_id: str, user_ip: str, username: str, text: str,
-                   parent_comment_id: str = "", image_path: str = "") -> dict:
+                   parent_comment_id: str = "", image_path: str = "",
+                   file_path: str = "") -> dict:
     now = datetime.datetime.utcnow()
     row = {
         "comment_id":        str(uuid.uuid4()),
@@ -464,6 +499,7 @@ def create_comment(thread_id: str, user_ip: str, username: str, text: str,
         "username_snapshot": username,
         "text":              text,
         "image_path":        image_path,
+        "file_path":         file_path,
         "created_at":        now,
         "like_count":        0,
     }
@@ -481,7 +517,7 @@ def get_comments(thread_id: str) -> list:
     try:
         rows = con.execute(
             f"""
-            SELECT * FROM read_parquet(['{glob_str}'])
+            SELECT * FROM read_parquet(['{glob_str}'], union_by_name=TRUE)
             WHERE thread_id = ?
             ORDER BY created_at ASC
             """,
@@ -511,7 +547,7 @@ def count_comments_for_threads(thread_ids: list) -> dict:
         rows = con.execute(
             f"""
             SELECT thread_id, COUNT(*) AS cnt
-            FROM read_parquet(['{glob_str}'])
+            FROM read_parquet(['{glob_str}'], union_by_name=TRUE)
             WHERE thread_id IN ({ids_sql})
               AND (parent_comment_id IS NULL OR parent_comment_id = '')
             GROUP BY thread_id
@@ -535,7 +571,7 @@ def get_replies(comment_id: str) -> list:
     try:
         rows = con.execute(
             f"""
-            SELECT * FROM read_parquet(['{glob_str}'])
+            SELECT * FROM read_parquet(['{glob_str}'], union_by_name=TRUE)
             WHERE parent_comment_id = ?
             ORDER BY created_at ASC
             """,

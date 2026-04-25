@@ -195,6 +195,12 @@
                 <div id="threadImagesPreviewGrid" class="d-flex flex-wrap gap-2"></div>
               </div>
             </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">File Lampiran <span class="text-muted small">(opsional, maks. 10 file, maks. 50 MB per file)</span></label>
+              <input type="file" class="form-control" id="threadFiles" name="files"
+                     accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.zip,.rar,.7z,.tar,.gz,.json,.xml,.md,.rtf,.odt,.ods,.odp,.tsv,.log" multiple>
+              <div id="threadFilesPreviewList" class="mt-2 d-none list-group list-group-flush"></div>
+            </div>
             <div id="threadFormError" class="text-danger small d-none"></div>
           </form>
         </div>

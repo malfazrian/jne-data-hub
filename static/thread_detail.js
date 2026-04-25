@@ -23,7 +23,17 @@ document.addEventListener("DOMContentLoaded", () => {
       commentImgPreview.classList.remove("d-none");
     }
   });
+  /* ── Comment file preview ───────────────────────────────────────────── */
+  const commentFileInput   = document.getElementById("commentFile");
+  const commentFilePreview = document.getElementById("commentFilePreview");
+  const commentFileNameEl  = document.getElementById("commentFilePreviewName");
 
+  commentFileInput?.addEventListener("change", function() {
+    if (this.files[0]) {
+      commentFileNameEl.textContent = this.files[0].name;
+      commentFilePreview.classList.remove("d-none");
+    }
+  });
   /* ── Comment form submit ─────────────────────────────────────────────── */
   document.getElementById("commentForm")?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -42,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
       appendComment(data, fd.get("parent_comment_id") || "");
       form.reset();
       commentImgPreview?.classList.add("d-none");
+      commentFilePreview?.classList.add("d-none");
       cancelReply();
       showToast("Komentar diposting!");
       document.getElementById("noComments")?.remove();
@@ -115,6 +126,8 @@ function appendComment(c, parentId) {
   const imgHtml = c.image_url
     ? `<img src="${c.image_url}" class="img-fluid rounded mb-1" style="max-height:150px;" alt="image">`
     : "";
+  const fileHtml = (Array.isArray(c.file_items) && c.file_items.length)
+    ? buildFileAttachmentsHtml(c.file_items) : "";
 
   const div = document.createElement("div");
   div.className = "thread-card mb-2 comment-item new-item";
@@ -140,6 +153,7 @@ function appendComment(c, parentId) {
         </div>
         <p class="mb-1 mt-1 small comment-text-${c.comment_id}">${linkify(c.text)}</p>
         ${imgHtml}
+        ${fileHtml}
         <div class="d-flex gap-3 mt-1">
           <button class="btn btn-link btn-sm p-0 text-muted like-btn"
                   data-id="${c.comment_id}" data-kind="comment" onclick="toggleLike(this)">
@@ -205,6 +219,8 @@ window.toggleReplies = async function(commentId, btn) {
       const imgHtml = r.image_url
         ? `<img src="${r.image_url}" class="img-fluid rounded mb-1" style="max-height:150px;" alt="image">`
         : "";
+      const fileHtml = (Array.isArray(r.file_items) && r.file_items.length)
+        ? buildFileAttachmentsHtml(r.file_items) : "";
       const avatarHtmlStr = r.avatar_url
         ? `<img src="${r.avatar_url}" class="thread-avatar-xs" alt="avatar" onerror="this.style.display='none'">`
         : `<div class="thread-avatar-xs-placeholder">${(r.username_snapshot||"?")[0].toUpperCase()}</div>`;
@@ -225,6 +241,7 @@ window.toggleReplies = async function(commentId, btn) {
             </div>
             <p class="mb-1 mt-1 small comment-text-${r.comment_id}">${linkify(r.text)}</p>
             ${imgHtml}
+            ${fileHtml}
             <div class="d-flex gap-3 mt-1">
               <button class="btn btn-link btn-sm p-0 text-muted like-btn ${likedClass}"
                       data-id="${r.comment_id}" data-kind="comment" onclick="toggleLike(this)">
@@ -266,6 +283,13 @@ window.cancelReply = function() {
 window.clearCommentImage = function() {
   document.getElementById("commentImage").value = "";
   document.getElementById("commentImagePreview").classList.add("d-none");
+};
+
+/* ── Clear comment file ──────────────────────────────────────────────────── */
+
+window.clearCommentFile = function() {
+  document.getElementById("commentFile").value = "";
+  document.getElementById("commentFilePreview").classList.add("d-none");
 };
 
 /* ── Edit thread modal opener ────────────────────────────────────────────── */

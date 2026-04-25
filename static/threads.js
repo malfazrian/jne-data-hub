@@ -192,6 +192,7 @@ if (document.getElementById("threadList") !== null) {
     const imgHtml = _imgs.length
       ? `<div class="thread-img-scroll">${_imgs.map(u => `<img src="${u}" class="thread-img-thumb" alt="thread image">`).join("")}</div>`
       : "";
+    const fileHtml = buildFileAttachmentsHtml(t.file_items || []);
     const menuHtml    = owned ? `
       <div class="dropdown">
         <button class="btn btn-link btn-sm p-0 text-muted" data-bs-toggle="dropdown">
@@ -219,6 +220,7 @@ if (document.getElementById("threadList") !== null) {
           </div>
           <p class="mt-2 mb-2 thread-text">${linkify(t.text)}</p>
           ${imgHtml}
+          ${fileHtml}
           <div class="d-flex gap-3 mt-2 thread-actions">
             <button class="btn btn-link btn-sm p-0 text-muted like-btn ${likedClass}"
                     data-id="${t.thread_id}" data-kind="thread" onclick="toggleLike(this)">
@@ -321,13 +323,32 @@ if (document.getElementById("threadList") !== null) {
     wrap.classList.remove("d-none");
   });
 
+  // File preview
+  document.getElementById("threadFiles")?.addEventListener("change", function() {
+    const list = document.getElementById("threadFilesPreviewList");
+    const MAX = 10;
+    const files = Array.from(this.files).slice(0, MAX);
+    list.innerHTML = "";
+    if (!files.length) { list.classList.add("d-none"); return; }
+    files.forEach(file => {
+      const item = document.createElement("div");
+      item.className = "list-group-item py-1 px-2 d-flex align-items-center gap-2 border-0";
+      item.innerHTML = `<i class="bi ${fileIcon(file.name)} text-primary"></i>
+        <span class="small text-truncate flex-grow-1">${escHtml(file.name)}</span>
+        <span class="text-muted" style="font-size:.7rem">${formatFileSize(file.size)}</span>`;
+      list.appendChild(item);
+    });
+    list.classList.remove("d-none");
+  });
+
   // Save thread
   document.getElementById("btnThreadSave")?.addEventListener("click", async () => {
     const errEl   = document.getElementById("threadFormError");
     const threadId = document.getElementById("threadModalId").value;
     const text  = document.getElementById("threadText").value.trim();
     const topic = document.getElementById("threadTopic").value.trim();
-    const imgInput = document.getElementById("threadImages");
+    const imgInput  = document.getElementById("threadImages");
+    const fileInput  = document.getElementById("threadFiles");
 
     if (!text) {
       errEl.textContent = "Text wajib diisi.";
@@ -336,7 +357,9 @@ if (document.getElementById("threadList") !== null) {
     }
 
     const MAX_IMAGES = 20;
-    const selectedFiles = imgInput ? Array.from(imgInput.files).slice(0, MAX_IMAGES) : [];
+    const MAX_FILES  = 10;
+    const selectedFiles     = imgInput  ? Array.from(imgInput.files).slice(0, MAX_IMAGES) : [];
+    const selectedFileFiles = fileInput ? Array.from(fileInput.files).slice(0, MAX_FILES)  : [];
 
     const spinner = document.getElementById("threadSaveSpinner");
     const saveBtn  = document.getElementById("btnThreadSave");
@@ -347,6 +370,7 @@ if (document.getElementById("threadList") !== null) {
     fd.append("text", text);
     fd.append("topic", topic);
     selectedFiles.forEach(f => fd.append("images", f));
+    selectedFileFiles.forEach(f => fd.append("files", f));
 
     try {
       let data;
@@ -372,6 +396,8 @@ if (document.getElementById("threadList") !== null) {
       document.getElementById("threadForm").reset();
       document.getElementById("threadImagesPreviewWrap").classList.add("d-none");
       document.getElementById("threadImagesPreviewGrid").innerHTML = "";
+      const fpList = document.getElementById("threadFilesPreviewList");
+      if (fpList) { fpList.innerHTML = ""; fpList.classList.add("d-none"); }
     } catch (e) {
       errEl.textContent = e.message;
       errEl.classList.remove("d-none");
@@ -527,6 +553,44 @@ function linkify(str) {
     /https?:\/\/[^\s<>"]+/g,
     url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
   );
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileIcon(name) {
+  if (!name) return "bi-file-earmark";
+  const ext = name.split(".").pop().toLowerCase();
+  const map = {
+    pdf:  "bi-file-earmark-pdf",
+    doc:  "bi-file-earmark-word", docx: "bi-file-earmark-word",
+    xls:  "bi-file-earmark-excel", xlsx: "bi-file-earmark-excel",
+    csv:  "bi-file-earmark-spreadsheet", tsv: "bi-file-earmark-spreadsheet",
+    ppt:  "bi-file-earmark-ppt", pptx: "bi-file-earmark-ppt",
+    zip:  "bi-file-earmark-zip", rar: "bi-file-earmark-zip",
+    "7z": "bi-file-earmark-zip", tar: "bi-file-earmark-zip", gz: "bi-file-earmark-zip",
+    txt:  "bi-file-earmark-text", md: "bi-file-earmark-text", log: "bi-file-earmark-text",
+    json: "bi-file-earmark-code", xml: "bi-file-earmark-code",
+    rtf:  "bi-file-earmark-richtext",
+  };
+  return map[ext] || "bi-file-earmark";
+}
+
+function buildFileAttachmentsHtml(fileItems) {
+  if (!Array.isArray(fileItems) || !fileItems.length) return "";
+  const items = fileItems.map(f =>
+    `<a href="${f.url}" download="${escHtml(f.name)}" class="list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2 border-0" target="_blank">
+      <i class="bi ${fileIcon(f.name)} text-primary"></i>
+      <span class="small text-truncate flex-grow-1" style="max-width:220px">${escHtml(f.name)}</span>
+      ${f.size ? `<span class="text-muted" style="font-size:.7rem;white-space:nowrap">${formatFileSize(f.size)}</span>` : ""}
+      <i class="bi bi-download text-muted ms-1" style="font-size:.75rem"></i>
+    </a>`
+  ).join("");
+  return `<div class="list-group list-group-flush border rounded mb-2" style="font-size:.85rem">${items}</div>`;
 }
 
 /* ─── Image Lightbox ────────────────────────────────────────────────────── */
