@@ -39,7 +39,7 @@ def threads_page():
     return render_template("threads.html", user=user, current_ip=ip)
 
 
-@thread_bp.route("/thread/<thread_id>")
+@thread_bp.route("/post/<thread_id>")
 def thread_detail_page(thread_id):
     ip     = _get_ip()
     user   = ts.get_or_create_user(ip)
@@ -82,6 +82,9 @@ def api_get_threads():
     ip       = _get_ip()
     result   = ts.list_threads(page, per_page, topic)
     liked_ids = ts.get_user_liked_ids(ip)
+    # Batch-fetch comment counts for all threads in this page
+    thread_ids = [t["thread_id"] for t in result["threads"]]
+    comment_counts = ss.count_comments_for_threads(thread_ids)
     # Build per-IP avatar cache (one lookup per unique user in page)
     _avatar_cache = {}
     for t in result["threads"]:
@@ -89,11 +92,12 @@ def api_get_threads():
         if t_ip not in _avatar_cache:
             u = ss.get_user(t_ip)
             _avatar_cache[t_ip] = _image_url(u.get("profile_pic", "")) if u else ""
-        t["liked"]      = t["thread_id"] in liked_ids
-        t["share_url"]  = url_for("threads.thread_detail_page",
-                                  thread_id=t["thread_id"], _external=True)
-        t["image_url"]  = _image_url(t.get("image_path", ""))
-        t["avatar_url"] = _avatar_cache[t_ip]
+        t["liked"]         = t["thread_id"] in liked_ids
+        t["share_url"]     = url_for("threads.thread_detail_page",
+                                     thread_id=t["thread_id"], _external=True)
+        t["image_url"]     = _image_url(t.get("image_path", ""))
+        t["avatar_url"]    = _avatar_cache[t_ip]
+        t["comment_count"] = comment_counts.get(t["thread_id"], 0)
     return jsonify(result)
 
 

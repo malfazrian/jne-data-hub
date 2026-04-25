@@ -81,7 +81,8 @@
 }
 
 /* Action buttons */
-.thread-actions .btn-link {
+.thread-actions .btn-link,
+.comment-item .btn-link {
   text-decoration: none !important;
   font-size: 0.85rem;
   color: #6c757d;
@@ -91,7 +92,9 @@
   gap: 4px;
 }
 .thread-actions .btn-link:hover,
-.thread-actions .btn-link.liked {
+.thread-actions .btn-link.liked,
+.comment-item .btn-link:hover,
+.comment-item .btn-link.liked {
   color: #D62828;
 }
 .thread-actions .bi-heart-fill {

@@ -209,13 +209,13 @@ if (document.getElementById("threadList") !== null) {
         <div class="flex-grow-1">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              <a href="/thread/${t.thread_id}" class="fw-bold text-decoration-none text-dark">${escHtml(t.username_snapshot)}</a>
+              <a href="/post/${t.thread_id}" class="fw-bold text-decoration-none text-dark">${escHtml(t.username_snapshot)}</a>
               ${topicBadge}
               <span class="text-muted small ms-2" data-ts="${t.created_at}"></span>
             </div>
             ${menuHtml}
           </div>
-          <a href="/thread/${t.thread_id}" class="text-decoration-none text-dark">
+          <a href="/post/${t.thread_id}" class="text-decoration-none text-dark">
             <p class="mt-2 mb-2 thread-text">${escHtml(t.text)}</p>
             ${imgHtml}
           </a>
@@ -225,8 +225,9 @@ if (document.getElementById("threadList") !== null) {
               <i class="bi ${heartIcon}"></i>
               <span class="like-count">${t.like_count}</span>
             </button>
-            <a href="/thread/${t.thread_id}" class="btn btn-link btn-sm p-0 text-muted">
+            <a href="/post/${t.thread_id}" class="btn btn-link btn-sm p-0 text-muted">
               <i class="bi bi-chat"></i>
+              <span>${t.comment_count ?? 0}</span>
             </a>
             <button class="btn btn-link btn-sm p-0 text-muted" onclick="shareThread('${t.thread_id}', this)">
               <i class="bi bi-share"></i>
@@ -287,7 +288,7 @@ if (document.getElementById("threadList") !== null) {
   window.openEditThread = async function(thread_id) {
     try {
       // fetch thread details
-      const res = await fetch(`/thread/${thread_id}`);
+      const res = await fetch(`/post/${thread_id}`);
       // We don't have a GET /api/hub/:id, re-use the page link
       // Instead, find it in DOM
       const card = document.querySelector(`[data-id="${thread_id}"]`);

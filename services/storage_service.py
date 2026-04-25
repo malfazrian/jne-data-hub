@@ -467,6 +467,34 @@ def get_comments(thread_id: str) -> list:
         con.close()
 
 
+def count_comments_for_threads(thread_ids: list) -> dict:
+    """Return {thread_id: top-level comment count} for a list of thread IDs."""
+    if not thread_ids:
+        return {}
+    partitions = _all_existing_partitions("comments")
+    if not partitions:
+        return {tid: 0 for tid in thread_ids}
+    glob_str = "', '".join([_esc(p) for p in partitions])
+    ids_sql  = ", ".join([f"'{tid}'" for tid in thread_ids])
+    con = _conn()
+    try:
+        rows = con.execute(
+            f"""
+            SELECT thread_id, COUNT(*) AS cnt
+            FROM read_parquet(['{glob_str}'])
+            WHERE thread_id IN ({ids_sql})
+              AND (parent_comment_id IS NULL OR parent_comment_id = '')
+            GROUP BY thread_id
+            """
+        ).fetchdf()
+    finally:
+        con.close()
+    result = {tid: 0 for tid in thread_ids}
+    for _, row in rows.iterrows():
+        result[row["thread_id"]] = int(row["cnt"])
+    return result
+
+
 def get_replies(comment_id: str) -> list:
     """Return all replies (children) for a given top-level comment, oldest first."""
     partitions = _all_existing_partitions("comments")
