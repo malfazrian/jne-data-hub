@@ -85,7 +85,19 @@ def edit_thread(thread_id, user_ip, text=None, image_files=None, topic=None):
 
 
 def remove_thread(thread_id, user_ip):
-    return ss.delete_thread(thread_id, user_ip)
+    image_paths = ss.delete_thread(thread_id, user_ip)
+    if image_paths is None:
+        return False
+    # Delete physical image files from disk
+    for rel_path in image_paths:
+        if not rel_path:
+            continue
+        abs_path = os.path.join(IMAGES_DIR, os.path.basename(rel_path))
+        try:
+            os.remove(abs_path)
+        except OSError:
+            pass  # already gone or never existed
+    return True
 
 
 def share_thread(thread_id):

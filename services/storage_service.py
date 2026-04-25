@@ -4,6 +4,7 @@ DuckDB + Parquet storage layer for the Threads feature.
 All queries go directly to parquet files without loading full data into memory.
 """
 import os
+import json
 import uuid
 import datetime
 import threading
@@ -386,22 +387,48 @@ def update_thread(thread_id: str, user_ip: str, text: str = None,
     return True
 
 
-def delete_thread(thread_id: str, user_ip: str) -> bool:
-    dt = _get_thread_created_at(thread_id)
-    if not dt:
-        return False
+def delete_thread(thread_id: str, user_ip: str):
+    """Delete a thread and all its comments/replies.
+    Returns list of relative image paths that were removed, or None if not found/unauthorized.
+    """
+    thread = get_thread(thread_id)
+    if not thread or thread["user_ip"] != user_ip:
+        return None
+
+    dt = datetime.datetime.fromisoformat(thread["created_at"].replace("Z", ""))
+
+    # ── Collect image paths before deletion ───────────────────────────────
+    image_paths = []
+    raw_path = thread.get("image_path", "")
+    if raw_path:
+        if raw_path.startswith("["):
+            try:
+                image_paths.extend([p for p in json.loads(raw_path) if p])
+            except json.JSONDecodeError:
+                image_paths.append(raw_path)
+        else:
+            image_paths.append(raw_path)
+
+    # collect comment/reply image paths (get_comments returns all rows for thread)
+    for c in get_comments(thread_id):
+        cp = c.get("image_path", "")
+        if cp:
+            image_paths.append(cp)
+
+    # ── Delete thread row ─────────────────────────────────────────────────
     _rewrite_partition("threads", dt,
                        f"thread_id = '{thread_id}' AND user_ip = '{user_ip}'")
-    # also delete comments
+
+    # ── Delete all comments and replies for this thread ───────────────────
     for p in _all_existing_partitions("comments"):
-        # parse dt from filename
         fname = os.path.basename(p).replace("comments_", "").replace(".parquet", "")
         parts = fname.split("_")
         year  = int(parts[0])
         q     = int(parts[1][1])
         cdt   = datetime.datetime(year, (q - 1) * 3 + 1, 1)
         _rewrite_partition("comments", cdt, f"thread_id = '{thread_id}'")
-    return True
+
+    return image_paths
 
 
 def increment_share(thread_id: str) -> bool:
