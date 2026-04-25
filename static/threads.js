@@ -186,7 +186,7 @@ if (document.getElementById("threadList") !== null) {
     const owned = (t.user_ip === CFG.currentIp) || false;
     const likedClass  = t.liked ? "liked" : "";
     const heartIcon   = t.liked ? "bi-heart-fill text-danger" : "bi-heart";
-    const topicBadge  = t.topic ? `<span><i class="bi bi-chevron-right"></i> ${escHtml(t.topic)}</span>` : "";
+    const topicBadge  = t.topic ? `<button class="topic-badge-btn" onclick="filterByTopic('${escHtml(t.topic)}')"><i class="bi bi-chevron-right"></i> ${escHtml(t.topic)}</button>` : "";
     const imgHtml     = t.image_url
       ? `<img src="${t.image_url}" class="img-fluid thread-img mb-2" alt="thread image">`
       : "";
@@ -209,16 +209,14 @@ if (document.getElementById("threadList") !== null) {
         <div class="flex-grow-1">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              <a href="/post/${t.thread_id}" class="fw-bold text-decoration-none text-dark">${escHtml(t.username_snapshot)}</a>
+              <span class="fw-bold text-decoration-none text-dark">${escHtml(t.username_snapshot)}</span>
               ${topicBadge}
               <span class="text-muted small ms-2" data-ts="${t.created_at}"></span>
             </div>
             ${menuHtml}
           </div>
-          <a href="/post/${t.thread_id}" class="text-decoration-none text-dark">
-            <p class="mt-2 mb-2 thread-text">${escHtml(t.text)}</p>
-            ${imgHtml}
-          </a>
+          <p class="mt-2 mb-2 thread-text">${linkify(t.text)}</p>
+          ${imgHtml}
           <div class="d-flex gap-3 mt-2 thread-actions">
             <button class="btn btn-link btn-sm p-0 text-muted like-btn ${likedClass}"
                     data-id="${t.thread_id}" data-kind="thread" onclick="toggleLike(this)">
@@ -388,11 +386,19 @@ if (document.getElementById("threadList") !== null) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ thread_id }),
       });
-      await navigator.clipboard.writeText(data.share_url);
+      await copyToClipboard(data.share_url);
       showToast("Link disalin ke clipboard!");
       const countEl = btn.querySelector("span");
       if (countEl) countEl.textContent = parseInt(countEl.textContent || "0") + 1;
     } catch(e) { showToast(e.message, true); }
+  };
+
+  // Filter by topic (called from topic badge click)
+  window.filterByTopic = function(topic) {
+    _topic = topic;
+    const input = document.getElementById("topicFilter");
+    if (input) input.value = topic;
+    loadThreads(true);
   };
 
   // Topic filter
@@ -452,6 +458,26 @@ window.toggleLike = async function(btn) {
 
 /* ─── Shared: Copy share URL ─────────────────────────────────────────────── */
 
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback for HTTP / non-secure context
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity  = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(ta);
+  }
+  return Promise.resolve();
+}
+
 window.copyShareUrl = async function(thread_id) {
   try {
     const data = await apiJSON("/api/share/thread", {
@@ -459,7 +485,7 @@ window.copyShareUrl = async function(thread_id) {
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ thread_id }),
     });
-    await navigator.clipboard.writeText(data.share_url);
+    await copyToClipboard(data.share_url);
     showToast("Link disalin ke clipboard!");
   } catch(e) { showToast(e.message, true); }
 };
@@ -472,4 +498,11 @@ function escHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function linkify(str) {
+  return escHtml(str).replace(
+    /https?:\/\/[^\s<>"]+/g,
+    url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
 }

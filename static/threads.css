@@ -19,6 +19,8 @@
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 45, 114, 0.06);
   transition: box-shadow 0.2s;
+  min-width: 0;
+  overflow: hidden;
 }
 .thread-card:hover {
   box-shadow: 0 4px 16px rgba(0, 45, 114, 0.12);
@@ -118,6 +120,19 @@
 }
 
 /* Topic badge */
+.topic-badge-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #247fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+.topic-badge-btn:hover {
+  text-decoration: underline;
+  color: #002D72;
+}
 .badge.bg-primary {
   background: linear-gradient(135deg, #002D72, #247fff) !important;
   font-size: 0.7rem;
@@ -130,6 +145,9 @@
 .thread-text {
   white-space: pre-line;
   line-height: 1.55;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 /* Separator line left (nested comments) */

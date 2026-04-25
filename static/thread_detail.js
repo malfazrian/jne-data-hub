@@ -130,7 +130,7 @@ function appendComment(c, parentId) {
           </div>
           ${menuHtml}
         </div>
-        <p class="mb-1 mt-1 small comment-text-${c.comment_id}">${escHtml(c.text)}</p>
+        <p class="mb-1 mt-1 small comment-text-${c.comment_id}">${linkify(c.text)}</p>
         ${imgHtml}
         <div class="d-flex gap-3 mt-1">
           <button class="btn btn-link btn-sm p-0 text-muted like-btn"
@@ -215,7 +215,7 @@ window.toggleReplies = async function(commentId, btn) {
               <span class="fw-semibold" style="font-size:0.8rem;">${escHtml(r.username_snapshot)}</span>
               ${menuHtml}
             </div>
-            <p class="mb-1 mt-1 small comment-text-${r.comment_id}">${escHtml(r.text)}</p>
+            <p class="mb-1 mt-1 small comment-text-${r.comment_id}">${linkify(r.text)}</p>
             ${imgHtml}
             <div class="d-flex gap-3 mt-1">
               <button class="btn btn-link btn-sm p-0 text-muted like-btn ${likedClass}"
