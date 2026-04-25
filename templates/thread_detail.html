@@ -119,9 +119,13 @@
               {% endif %}
             </div>
             <p class="mt-2 mb-2 thread-text">{{ thread.text }}</p>
-            {% if thread.image_path %}
-            <img src="{{ url_for('threads.thread_image', filename=thread.image_path.split('/')[-1]) }}"
-                 class="img-fluid rounded mb-2 thread-img" alt="thread image">
+            {% if thread.image_paths %}
+            <div class="thread-img-scroll mb-2">
+              {% for img_path in thread.image_paths %}
+              <img src="{{ url_for('threads.thread_image', filename=img_path.split('/')[-1]) }}"
+                   class="thread-img-thumb" alt="thread image">
+              {% endfor %}
+            </div>
             {% endif %}
             <div class="d-flex gap-3 mt-2 thread-actions">
               <button class="btn btn-link btn-sm p-0 text-muted like-btn {% if thread.thread_id in liked_ids %}liked{% endif %}"

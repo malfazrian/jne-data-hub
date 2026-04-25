@@ -90,6 +90,14 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btnProfileCancel")?.addEventListener("click", () => {
     bootstrap.Modal.getInstance(document.getElementById("profileModal"))?.hide();
   });
+
+  // Mouse-wheel → horizontal scroll on image strips
+  document.addEventListener("wheel", function(e) {
+    const strip = e.target.closest(".thread-img-scroll");
+    if (!strip) return;
+    e.preventDefault();
+    strip.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
+  }, { passive: false });
 });
 
 /* ── Helper: append new comment to DOM ───────────────────────────────────── */

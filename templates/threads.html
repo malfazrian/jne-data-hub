@@ -187,11 +187,12 @@
                      placeholder="Performance">
             </div>
             <div class="mb-3">
-              <label class="form-label fw-semibold">Image <span class="text-muted small">(opsional)</span></label>
-              <input type="file" class="form-control" id="threadImage" name="image"
-                     accept=".jpg,.jpeg,.png,.webp">
-              <div id="threadImagePreviewWrap" class="mt-2 d-none">
-                <img id="threadImagePreview" src="" class="img-fluid rounded" style="max-height:200px;" alt="preview">
+              <label class="form-label fw-semibold">Images <span class="text-muted small">(opsional, maks. 20)</span></label>
+              <input type="file" class="form-control" id="threadImages" name="images"
+                     accept=".jpg,.jpeg,.png,.webp" multiple>
+              <div class="form-text">Pilih hingga 20 gambar sekaligus.</div>
+              <div id="threadImagesPreviewWrap" class="mt-2 d-none">
+                <div id="threadImagesPreviewGrid" class="d-flex flex-wrap gap-2"></div>
               </div>
             </div>
             <div id="threadFormError" class="text-danger small d-none"></div>

@@ -3,6 +3,7 @@ routes/thread_routes.py
 Flask blueprint for the Threads feature.
 """
 import os
+import json
 from flask import (
     Blueprint, render_template, request, jsonify,
     send_from_directory, abort, url_for
@@ -20,6 +21,23 @@ def _get_file(name: str):
     """Return the uploaded FileStorage or None when no file was selected."""
     f = request.files.get(name)
     return f if (f and f.filename) else None
+
+
+def _parse_image_paths(path: str) -> list:
+    """Parse image_path (JSON list or legacy single string) into a list of paths."""
+    if not path:
+        return []
+    if path.startswith("["):
+        try:
+            return [p for p in json.loads(path) if p]
+        except Exception:
+            return [path]
+    return [path]
+
+
+def _image_urls(path: str) -> list:
+    """Return a list of full URLs for the stored image_path value."""
+    return [_image_url(p) for p in _parse_image_paths(path)]
 
 
 # ── Static: serve thread images ───────────────────────────────────────────────
@@ -51,7 +69,8 @@ def thread_detail_page(thread_id):
         abort(404)
     # Resolve thread author's profile pic
     thread_author = ss.get_user(thread["user_ip"])
-    thread["author_pic"] = _image_url(thread_author.get("profile_pic", "")) if thread_author else ""
+    thread["author_pic"]   = _image_url(thread_author.get("profile_pic", "")) if thread_author else ""
+    thread["image_paths"]  = _parse_image_paths(thread.get("image_path", ""))
     comments = ts.list_comments(thread_id)
     # Resolve comment/reply author profile pics (one lookup per unique IP)
     _avatar_cache = {thread["user_ip"]: thread["author_pic"]}
@@ -95,7 +114,7 @@ def api_get_threads():
         t["liked"]         = t["thread_id"] in liked_ids
         t["share_url"]     = url_for("threads.thread_detail_page",
                                      thread_id=t["thread_id"], _external=True)
-        t["image_url"]     = _image_url(t.get("image_path", ""))
+        t["image_urls"]    = _image_urls(t.get("image_path", ""))
         t["avatar_url"]    = _avatar_cache[t_ip]
         t["comment_count"] = comment_counts.get(t["thread_id"], 0)
     return jsonify(result)
@@ -113,13 +132,13 @@ def api_create_thread():
     if not text:
         return jsonify({"error": "Text is required."}), 400
 
-    image_file = _get_file("image")
-    thread, err = ts.create_thread(ip, user["username"], text, image_file, topic)
+    image_files = [f for f in request.files.getlist("images") if f and f.filename][:20]
+    thread, err = ts.create_thread(ip, user["username"], text, image_files, topic)
     if err:
         return jsonify({"error": err}), 400
-    thread["share_url"] = url_for("threads.thread_detail_page",
-                                  thread_id=thread["thread_id"], _external=True)
-    thread["image_url"] = _image_url(thread.get("image_path", ""))
+    thread["share_url"]  = url_for("threads.thread_detail_page",
+                                   thread_id=thread["thread_id"], _external=True)
+    thread["image_urls"] = _image_urls(thread.get("image_path", ""))
     return jsonify(thread), 201
 
 
@@ -128,13 +147,13 @@ def api_update_thread(thread_id):
     ip   = _get_ip()
     text  = (request.form.get("text") or "").strip() or None
     topic = request.form.get("topic")
-    image_file = _get_file("image")
+    image_files = [f for f in request.files.getlist("images") if f and f.filename][:20]
     ok, err = ts.edit_thread(thread_id, ip, text=text,
-                              image_file=image_file, topic=topic)
+                              image_files=image_files, topic=topic)
     if not ok:
         return jsonify({"error": err or "Not found"}), 404
     thread = ts.get_thread(thread_id)
-    thread["image_url"] = _image_url(thread.get("image_path", ""))
+    thread["image_urls"] = _image_urls(thread.get("image_path", ""))
     return jsonify(thread)
 
 

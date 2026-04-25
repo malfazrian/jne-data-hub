@@ -4,6 +4,7 @@ Business logic layer: image handling, validation, orchestration.
 """
 import os
 import uuid
+import json
 from typing import Optional, Tuple
 from PIL import Image as PILImage
 
@@ -49,13 +50,14 @@ def save_image(file_storage) -> Tuple[bool, str]:
 
 # ── Thread service ────────────────────────────────────────────────────────────
 
-def create_thread(user_ip, username, text, image_file=None, topic=""):
-    image_path = ""
-    if image_file:
-        ok, result = save_image(image_file)
+def create_thread(user_ip, username, text, image_files=None, topic=""):
+    image_paths = []
+    for f in (image_files or []):
+        ok, result = save_image(f)
         if not ok:
             return None, result
-        image_path = result
+        image_paths.append(result)
+    image_path = json.dumps(image_paths) if image_paths else ""
     thread = ss.create_thread(user_ip, username, text, image_path, topic)
     return thread, None
 
@@ -68,13 +70,16 @@ def get_thread(thread_id):
     return ss.get_thread(thread_id)
 
 
-def edit_thread(thread_id, user_ip, text=None, image_file=None, topic=None):
+def edit_thread(thread_id, user_ip, text=None, image_files=None, topic=None):
     image_path = None
-    if image_file:
-        ok, result = save_image(image_file)
-        if not ok:
-            return False, result
-        image_path = result
+    if image_files:
+        paths = []
+        for f in image_files:
+            ok, result = save_image(f)
+            if not ok:
+                return False, result
+            paths.append(result)
+        image_path = json.dumps(paths)
     ok = ss.update_thread(thread_id, user_ip, text=text, image_path=image_path, topic=topic)
     return ok, None if ok else "Thread not found or not authorized"
 

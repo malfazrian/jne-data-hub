@@ -187,8 +187,10 @@ if (document.getElementById("threadList") !== null) {
     const likedClass  = t.liked ? "liked" : "";
     const heartIcon   = t.liked ? "bi-heart-fill text-danger" : "bi-heart";
     const topicBadge  = t.topic ? `<button class="topic-badge-btn" onclick="filterByTopic('${escHtml(t.topic)}')"><i class="bi bi-chevron-right"></i> ${escHtml(t.topic)}</button>` : "";
-    const imgHtml     = t.image_url
-      ? `<img src="${t.image_url}" class="img-fluid thread-img mb-2" alt="thread image">`
+    const _imgs = Array.isArray(t.image_urls) && t.image_urls.length ? t.image_urls
+                : (t.image_url ? [t.image_url] : []);
+    const imgHtml = _imgs.length
+      ? `<div class="thread-img-scroll">${_imgs.map(u => `<img src="${u}" class="thread-img-thumb" alt="thread image">`).join("")}</div>`
       : "";
     const menuHtml    = owned ? `
       <div class="dropdown">
@@ -299,16 +301,24 @@ if (document.getElementById("threadList") !== null) {
     } catch(e) { showToast(e.message, true); }
   };
 
-  // Image preview
-  document.getElementById("threadImage")?.addEventListener("change", function() {
-    const wrap = document.getElementById("threadImagePreviewWrap");
-    const prev = document.getElementById("threadImagePreview");
-    if (this.files[0]) {
-      prev.src = URL.createObjectURL(this.files[0]);
-      wrap.classList.remove("d-none");
-    } else {
-      wrap.classList.add("d-none");
-    }
+  // Image preview (multi)
+  document.getElementById("threadImages")?.addEventListener("change", function() {
+    const wrap = document.getElementById("threadImagesPreviewWrap");
+    const grid = document.getElementById("threadImagesPreviewGrid");
+    const MAX = 20;
+    const files = Array.from(this.files).slice(0, MAX);
+    grid.innerHTML = "";
+    if (!files.length) { wrap.classList.add("d-none"); return; }
+    files.forEach(file => {
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(file);
+      img.className = "img-thumbnail";
+      img.style.maxHeight = "90px";
+      img.style.maxWidth  = "120px";
+      img.alt = "preview";
+      grid.appendChild(img);
+    });
+    wrap.classList.remove("d-none");
   });
 
   // Save thread
@@ -317,13 +327,16 @@ if (document.getElementById("threadList") !== null) {
     const threadId = document.getElementById("threadModalId").value;
     const text  = document.getElementById("threadText").value.trim();
     const topic = document.getElementById("threadTopic").value.trim();
-    const imgInput = document.getElementById("threadImage");
+    const imgInput = document.getElementById("threadImages");
 
     if (!text) {
       errEl.textContent = "Text wajib diisi.";
       errEl.classList.remove("d-none");
       return;
     }
+
+    const MAX_IMAGES = 20;
+    const selectedFiles = imgInput ? Array.from(imgInput.files).slice(0, MAX_IMAGES) : [];
 
     const spinner = document.getElementById("threadSaveSpinner");
     const saveBtn  = document.getElementById("btnThreadSave");
@@ -333,7 +346,7 @@ if (document.getElementById("threadList") !== null) {
     const fd = new FormData();
     fd.append("text", text);
     fd.append("topic", topic);
-    if (imgInput?.files[0]) fd.append("image", imgInput.files[0]);
+    selectedFiles.forEach(f => fd.append("images", f));
 
     try {
       let data;
@@ -357,7 +370,8 @@ if (document.getElementById("threadList") !== null) {
       bootstrap.Modal.getInstance(document.getElementById("threadModal")).hide();
       showToast(threadId ? "Thread diperbarui." : "Thread diposting!");
       document.getElementById("threadForm").reset();
-      document.getElementById("threadImagePreviewWrap").classList.add("d-none");
+      document.getElementById("threadImagesPreviewWrap").classList.add("d-none");
+      document.getElementById("threadImagesPreviewGrid").innerHTML = "";
     } catch (e) {
       errEl.textContent = e.message;
       errEl.classList.remove("d-none");
@@ -420,6 +434,14 @@ if (document.getElementById("threadList") !== null) {
     _page++;
     loadThreads(false);
   });
+
+  // Mouse-wheel → horizontal scroll on image strips
+  document.getElementById("threadList")?.addEventListener("wheel", function(e) {
+    const strip = e.target.closest(".thread-img-scroll");
+    if (!strip) return;
+    e.preventDefault();
+    strip.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
+  }, { passive: false });
 
   // Init
   loadThreads(true);

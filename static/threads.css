@@ -82,6 +82,52 @@
   border-radius: 10px;
 }
 
+/* Constrain content column so flex children can't grow beyond card width */
+.thread-card .flex-grow-1 {
+  min-width: 0;
+}
+
+/* Horizontal scroll image strip (thread list) */
+.thread-img-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 8px;
+  /* bleed out of card padding so images reach card edges */
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  /* thin visible scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.18) transparent;
+}
+.thread-img-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.thread-img-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thread-img-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.18);
+  border-radius: 4px;
+}
+.thread-img-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.35);
+}
+.thread-img-thumb {
+  flex-shrink: 0;
+  height: 180px;
+  width: auto;
+  max-width: 280px;
+  object-fit: cover;
+  border-radius: 10px;
+  scroll-snap-align: start;
+}
+
 /* Action buttons */
 .thread-actions .btn-link,
 .comment-item .btn-link {
