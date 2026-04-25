@@ -520,7 +520,7 @@ class ProjectProcessorParquet:
                         chunk = normalize_all_dates(chunk, debug=False)
                         chunk = add_grouping_late(chunk)
 
-                    if not self.report:
+                    if not self.report or (self.status and self.status.lower() not in ("", "all")):
                         chunk = add_status_pod_2(chunk, debug=False)
                     if 'STATUS_POD_2' not in chunk.columns:
                         chunk['STATUS_POD_2'] = 'Unknown'

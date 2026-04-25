@@ -293,7 +293,7 @@ class ProjectProcessor:
                         df_split = normalize_all_dates(df_split, debug=False)
                         df_split = add_grouping_late(df_split)
 
-                    if not self.report:
+                    if not self.report or (self.status and self.status.lower() not in ("", "all")):
                         df_split = add_status_pod_2(df_split, debug=False)
                     if 'STATUS_POD_2' not in df_split.columns:
                         print(f"Warning: STATUS_POD_2 missing in chunk from {file_path}")
