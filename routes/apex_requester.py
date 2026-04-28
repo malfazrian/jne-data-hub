@@ -4,6 +4,9 @@ Routes: /apex_requester, /start-request, /progress-request/<task_id>,
         /download-request/<task_id>, /cancel-request/<task_id>
 """
 import os
+import datetime
+import shutil
+import time
 from pathlib import Path
 from threading import Thread
 
@@ -18,6 +21,40 @@ from routes.shared import archive_dir, APEX_DEFAULT_HOSTS
 apex_requester_bp = Blueprint("apex_requester", __name__)
 
 session_tasks = {}
+
+
+# ── Helper functions ──────────────────────────────────────────────────────────
+
+def cleanup_old_results():
+    requester_dir = Path(archive_dir) / "requester"
+    now = datetime.datetime.now()
+    if requester_dir.exists():
+        for name in os.listdir(requester_dir):
+            path = requester_dir / name
+            try:
+                mtime = datetime.datetime.fromtimestamp(path.stat().st_mtime)
+                if (now - mtime).days >= 1:
+                    shutil.rmtree(path, ignore_errors=True)
+            except Exception as e:
+                print(f"Error cleaning {path}: {e}")
+    expired = [
+        tid for tid in list(session_tasks)
+        if not (requester_dir / tid).exists()
+    ]
+    for tid in expired:
+        session_tasks.pop(tid, None)
+        print(f"[requester] Cleaned up expired task: {tid}")
+
+
+# ── Background thread: auto-cleanup ──────────────────────────────────────────
+
+def _auto_cleanup_thread():
+    while True:
+        cleanup_old_results()
+        time.sleep(3600)  # every 1 hour
+
+
+Thread(target=_auto_cleanup_thread, daemon=True).start()
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

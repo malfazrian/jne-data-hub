@@ -4,8 +4,11 @@ Routes: /apex_uploader, /start_job, /download-apex/<job_id>,
         /progress-apex/<job_id>, /check-job/<job_id>, /cancel-job/<job_id>
 """
 import json
+import os
 import time
 import uuid
+import datetime
+import shutil
 from pathlib import Path
 from threading import Thread
 
@@ -20,6 +23,40 @@ from routes.shared import archive_dir
 apex_uploader_bp = Blueprint("apex_uploader", __name__)
 
 job_status = {}
+
+
+# ── Helper functions ──────────────────────────────────────────────────────────
+
+def cleanup_old_results():
+    uploader_dir = Path(archive_dir) / "uploader"
+    now = datetime.datetime.now()
+    if uploader_dir.exists():
+        for name in os.listdir(uploader_dir):
+            path = uploader_dir / name
+            try:
+                mtime = datetime.datetime.fromtimestamp(path.stat().st_mtime)
+                if (now - mtime).days >= 1:
+                    shutil.rmtree(path, ignore_errors=True)
+            except Exception as e:
+                print(f"Error cleaning {path}: {e}")
+    expired = [
+        jid for jid in list(job_status)
+        if not (uploader_dir / jid).exists()
+    ]
+    for jid in expired:
+        job_status.pop(jid, None)
+        print(f"[uploader] Cleaned up expired job: {jid}")
+
+
+# ── Background thread: auto-cleanup ──────────────────────────────────────────
+
+def _auto_cleanup_thread():
+    while True:
+        cleanup_old_results()
+        time.sleep(3600)  # every 1 hour
+
+
+Thread(target=_auto_cleanup_thread, daemon=True).start()
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
