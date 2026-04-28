@@ -89,6 +89,17 @@ class ApexQueryJob:
                 self._log(f"Tidak ada AWB ditemukan di {source_file.name}")
                 continue
 
+            # Exclude AWB yang melebihi 17 karakter (ditolak server)
+            filtered_awb_set = {awb for awb in awb_set if len(str(awb)) <= 17}
+            excluded_count = len(awb_set) - len(filtered_awb_set)
+            if excluded_count > 0:
+                self._log(f"Excluded {excluded_count} AWB(s) dengan panjang > 17 karakter dari {source_file.name}")
+            awb_set = filtered_awb_set
+
+            if not awb_set:
+                self._log(f"Tidak ada AWB valid (≤17 karakter) di {source_file.name}")
+                continue
+
             # Simpan dengan nama file asli (ubah extension jadi .csv)
             output_csv = "Update" / self.download_dir / (source_file.stem + ".csv")
             save_awbs_to_csv(awb_set, output_path=output_csv)
