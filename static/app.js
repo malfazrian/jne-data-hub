@@ -58,6 +58,8 @@ function renderTable() {
     localStorage.setItem(STORAGE_KEY_LIST, JSON.stringify(projectList));
     $('#project_lists_input').val(JSON.stringify(payload));
     $runBtn.prop('disabled', projectList.length === 0);
+    const hasProjects = projectList.length > 0;
+    $('#project_dependent_section').toggle(hasProjects);
 }
 
 function filterProjects(query) {
@@ -293,6 +295,9 @@ $("#add_to_list").on("click", function() {
 });
 
 renderTable();
+if (projectList.length === 0) {
+    bootstrap.Collapse.getOrCreateInstance(document.getElementById('collapseProject')).show();
+}
 
 // Run process
 let lastRequestId = localStorage.getItem(STORAGE_KEY_REQ);
@@ -621,8 +626,8 @@ $('#copy_project_list_btn').on('click', () => {
     alert('Daftar project masih kosong!');
     return;
   }
-  const copyData = projectList.map(({category, name, id_account, late_delivery, _customers}) => ({
-    category, name, id_account, late_delivery, _customers
+  const copyData = projectList.map(({id_account, late_delivery}) => ({
+    id_account, late_delivery
   }));
   copyTextToClipboard(JSON.stringify(copyData, null, 2)).then(() => {
     const $btn = $('#copy_project_list_btn');
@@ -660,24 +665,47 @@ $('#save_import_project_btn').on('click', () => {
     return;
   }
 
-  const invalid = parsed.find(p => !p.name || !Array.isArray(p.id_account));
+  const invalid = parsed.find(p => !Array.isArray(p.id_account) || p.id_account.length === 0);
   if (invalid) {
-    $err.text('Setiap item harus memiliki field "name" (string) dan "id_account" (array).').show();
+    $err.text('Setiap item harus memiliki field "id_account" (array tidak kosong).').show();
     return;
   }
 
+  // Build reverse lookup: normalized id -> project name
+  const idToProjectName = {};
+  Object.entries(projects).forEach(([name, data]) => {
+    (data.id_account || []).forEach(pair => {
+      idToProjectName[ensureLeadingApostrophe(pair.id)] = name;
+    });
+  });
+
+  const failed = [];
   projectList = parsed.map(p => {
     const ids = (p.id_account || []).map(id => ensureLeadingApostrophe(id));
-    const signature = p.name + '|' + ids.slice().sort().join(',');
+    const name = idToProjectName[ids[0]];
+    if (!name || !projects[name]) {
+      failed.push(ids[0]);
+      return null;
+    }
+    const base = projects[name];
+    const custs = ids.map(id => {
+      const pair = (base.id_account || []).find(pair => ensureLeadingApostrophe(pair.id) === id);
+      return pair ? (pair.customer || '') : '';
+    });
+    const signature = name + '|' + ids.slice().sort().join(',');
     return {
-      category: p.category || '',
-      name: p.name,
+      category: base.category || '',
+      name,
       id_account: ids,
       late_delivery: p.late_delivery || false,
-      _customers: p._customers || [],
+      _customers: custs,
       _sig: signature
     };
-  });
+  }).filter(Boolean);
+
+  if (failed.length > 0) {
+    $err.text('ID tidak ditemukan di referensi: ' + failed.join(', ')).show();
+  }
 
   renderTable();
   bootstrap.Modal.getInstance(document.getElementById('importProjectModal')).hide();

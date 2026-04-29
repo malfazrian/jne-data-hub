@@ -178,7 +178,7 @@
             </div>
 
             <!-- Input Project -->
-            <div class="mb-3 position-relative" style="z-index: 2500;">
+            <div class="mb-3 position-relative" style="z-index: 100;">
               <label for="project_input" class="form-label">
                 <i class="bi bi-search me-1"></i> <span id="search_label">Pilih Project:</span>
               </label>
@@ -217,6 +217,9 @@
         </div>
     </div>
     </div>
+
+      <!-- === SECTION: HIDDEN WHEN NO PROJECT === -->
+      <div id="project_dependent_section" style="display:none;">
 
       <!-- === ACCORDION: PILIH SOURCE === -->
       <div class="accordion mb-4" id="accordionSource">
@@ -392,6 +395,8 @@
         </thead>
         <tbody id="project_list_body"></tbody>
       </table>
+
+      </div><!-- /#project_dependent_section -->
     </div>
   </main>
 
@@ -399,7 +404,7 @@
   <div class="modal fade" id="importProjectModal" tabindex="-1" aria-labelledby="importProjectModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
-        <div class="modal-header">
+        <div class="modal-header mt-5">
           <h5 class="modal-title" id="importProjectModalLabel">
             <i class="bi bi-clipboard-plus me-2"></i>Import Project List (Bulk)
           </h5>
@@ -408,7 +413,7 @@
         <div class="modal-body">
           <p class="text-muted small mb-2">Paste JSON array project list di bawah ini. Format yang diterima:</p>
           <textarea id="import_project_textarea" class="form-control font-monospace" rows="12"
-            placeholder='[&#10;  {&#10;    "category": "MARKETPLACE",&#10;    "name": "NAMA PROJECT",&#10;    "id_account": ["&#39;123456", "&#39;789012"],&#10;    "late_delivery": false,&#10;    "_customers": ["Nama Customer A", "Nama Customer B"]&#10;  }&#10;]'></textarea>
+            placeholder='[&#10;  {&#10;    "id_account": ["&#39;123456", "&#39;789012"],&#10;    "late_delivery": false,&#10;  }&#10;]'></textarea>
           <div id="import_error_msg" class="text-danger small mt-2" style="display:none;"></div>
         </div>
         <div class="modal-footer">
