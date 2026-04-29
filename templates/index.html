@@ -368,7 +368,18 @@
       {% endwith %}
 
       <!-- === LIST PROJECT === -->
-      <h2 class="mt-4"><i class="bi bi-list-check me-2"></i> Daftar Project</h2>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-3 gap-2">
+        <h2 class="mb-0"><i class="bi bi-list-check me-2"></i> Daftar Project</h2>
+        <div>
+          <span id="copy_notif" class="text-success small" style="display:none;">Project list copied!</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="copy_project_list_btn" title="Copy Project List">
+            <i class="bi bi-clipboard"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importProjectModal" title="Import Project List (Bulk)">
+            <i class="bi bi-clipboard-plus"></i>
+          </button>
+        </div>
+      </div>
       <table class="table table-bordered" id="project_list_table">
         <thead>
           <tr>
@@ -383,6 +394,32 @@
       </table>
     </div>
   </main>
+
+  <!-- === MODAL: IMPORT PROJECT LIST === -->
+  <div class="modal fade" id="importProjectModal" tabindex="-1" aria-labelledby="importProjectModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="importProjectModalLabel">
+            <i class="bi bi-clipboard-plus me-2"></i>Import Project List (Bulk)
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-2">Paste JSON array project list di bawah ini. Format yang diterima:</p>
+          <textarea id="import_project_textarea" class="form-control font-monospace" rows="12"
+            placeholder='[&#10;  {&#10;    "category": "MARKETPLACE",&#10;    "name": "NAMA PROJECT",&#10;    "id_account": ["&#39;123456", "&#39;789012"],&#10;    "late_delivery": false,&#10;    "_customers": ["Nama Customer A", "Nama Customer B"]&#10;  }&#10;]'></textarea>
+          <div id="import_error_msg" class="text-danger small mt-2" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="button" class="btn btn-primary" id="save_import_project_btn">
+            <i class="bi bi-floppy me-1"></i>Save Project List
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- === FOOTER === -->
   <footer>

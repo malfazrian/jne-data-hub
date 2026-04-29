@@ -592,6 +592,98 @@ if (!collapseUsage.contains(event.target) &&
 
 document.getElementById("year").textContent = new Date().getFullYear();
 
+// === Copy Project List ===
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback untuk HTTP / non-secure context (e.g. local IP)
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('execCommand failed'));
+    } catch (e) {
+      document.body.removeChild(ta);
+      reject(e);
+    }
+  });
+}
+
+$('#copy_project_list_btn').on('click', () => {
+  if (projectList.length === 0) {
+    alert('Daftar project masih kosong!');
+    return;
+  }
+  const copyData = projectList.map(({category, name, id_account, late_delivery, _customers}) => ({
+    category, name, id_account, late_delivery, _customers
+  }));
+  copyTextToClipboard(JSON.stringify(copyData, null, 2)).then(() => {
+    const $btn = $('#copy_project_list_btn');
+    $btn.html('<i class="bi bi-clipboard-check"></i>');
+    const $notif = $('#copy_notif');
+    $notif.stop(true, true).show().delay(2000).fadeOut(400, () => {
+      $btn.html('<i class="bi bi-clipboard"></i>');
+    });
+  }).catch(() => {
+    alert('Gagal menyalin ke clipboard.');
+  });
+});
+
+// === Import Project List (Bulk) ===
+$('#save_import_project_btn').on('click', () => {
+  const raw = $('#import_project_textarea').val().trim();
+  const $err = $('#import_error_msg');
+  $err.hide();
+
+  if (!raw) {
+    $err.text('Input tidak boleh kosong.').show();
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    $err.text('JSON tidak valid: ' + e.message).show();
+    return;
+  }
+
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    $err.text('Input harus berupa array JSON yang tidak kosong.').show();
+    return;
+  }
+
+  const invalid = parsed.find(p => !p.name || !Array.isArray(p.id_account));
+  if (invalid) {
+    $err.text('Setiap item harus memiliki field "name" (string) dan "id_account" (array).').show();
+    return;
+  }
+
+  projectList = parsed.map(p => {
+    const ids = (p.id_account || []).map(id => ensureLeadingApostrophe(id));
+    const signature = p.name + '|' + ids.slice().sort().join(',');
+    return {
+      category: p.category || '',
+      name: p.name,
+      id_account: ids,
+      late_delivery: p.late_delivery || false,
+      _customers: p._customers || [],
+      _sig: signature
+    };
+  });
+
+  renderTable();
+  bootstrap.Modal.getInstance(document.getElementById('importProjectModal')).hide();
+  $('#import_project_textarea').val('');
+});
+
 function startProgress(requestId) {
   const evtSource = new EventSource(`/progress/${requestId}`);
   evtSource.onmessage = function(e) {
