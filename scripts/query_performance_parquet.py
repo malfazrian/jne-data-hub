@@ -11,6 +11,42 @@ from openpyxl.styles import Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 
 
+# Path to the authoritative project reference CSV used for ID_ACCOUNT lookup
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+EXTERNAL_REF_CSV = os.getenv(
+    "PROJECT_REF_CSV",
+    os.path.join(_SCRIPTS_DIR, "..", "data", "project_reference.csv"),
+)
+
+
+def _load_ref_id_map(csv_path=None):
+    """Return {BIG_GROUPING_CUST: ['<id1>', '<id2>', ...]} from the reference CSV."""
+    path = csv_path or EXTERNAL_REF_CSV
+    try:
+        df = pd.read_csv(path, encoding="latin1")
+        if "BIG_GROUPING_CUST" not in df.columns:
+            print(f"⚠️ Kolom BIG_GROUPING_CUST tidak ditemukan di '{path}'")
+            return {}
+        # First column is numeric CUST_ID (no apostrophe); add it
+        cust_id_col = df.columns[0]
+        id_map = {}
+        for _, row in df.iterrows():
+            group = str(row["BIG_GROUPING_CUST"]).strip()
+            if not group or group.lower() == "nan":
+                continue
+            raw_id = str(row[cust_id_col]).strip()
+            if not raw_id or raw_id.lower() == "nan":
+                continue
+            cust_id = raw_id if raw_id.startswith("'") else "'" + raw_id
+            id_map.setdefault(group, [])
+            if cust_id not in id_map[group]:
+                id_map[group].append(cust_id)
+        return id_map
+    except Exception as e:
+        print(f"⚠️ Gagal load reference CSV '{path}': {e}")
+        return {}
+
+
 # ------------------- HELPERS: DuckDB-based IO -------------------
 def get_duckdb_connection():
     return duckdb.connect(database=":memory:", read_only=False)
@@ -277,6 +313,9 @@ class ProjectProcessorParquet:
         self.start_date = start_date
         self.end_date = end_date
 
+        # Load authoritative id_account lookup keyed by BIG_GROUPING_CUST
+        self._ref_id_map = _load_ref_id_map()
+
         self.bulan_id = {
             1: "JANUARI", 2: "FEBRUARI", 3: "MARET", 4: "APRIL",
             5: "MEI", 6: "JUNI", 7: "JULI", 8: "AGUSTUS",
@@ -393,13 +432,22 @@ class ProjectProcessorParquet:
 
         project_id_map = {}
         for proj in self.project_lists:
-            vals = []
-            for x in proj.get("id_account", []):
-                s = str(x).strip()
-                if not s.startswith("'"):
-                    s = "'" + s
-                vals.append(s)
-            project_id_map[proj["name"]] = vals
+            proj_name = proj["name"]
+            # Prefer ids from the authoritative external reference CSV
+            ref_ids = self._ref_id_map.get(proj_name)
+            if ref_ids:
+                project_id_map[proj_name] = ref_ids
+            else:
+                # Fallback: use id_account already carried in project_lists
+                vals = []
+                for x in proj.get("id_account", []):
+                    s = str(x).strip()
+                    if not s.startswith("'"):
+                        s = "'" + s
+                    vals.append(s)
+                project_id_map[proj_name] = vals
+                if not vals:
+                    print(f"⚠️ Tidak ada id_account untuk '{proj_name}' di reference CSV maupun project_lists.")
 
         results = {proj["name"]: [] for proj in self.project_lists}
 
@@ -488,7 +536,7 @@ class ProjectProcessorParquet:
                     df_proj = _load_filtered_parquet_with_duckdb(
                         con,
                         file_path,
-                        group_name=proj_name,
+                        group_name=None,
                         date_col="TGL_ENTRY",
                         start_dt=start_date,
                         end_dt=end_date,
