@@ -102,10 +102,21 @@ def _load_filtered_parquet_with_duckdb(
 
         # ID_ACCOUNT
         if id_account:
-            placeholders = ", ".join(["?"] * len(id_account))
+            account_values = []
+            for value in id_account:
+                raw = str(value).strip()
+                if not raw or raw.lower() == "nan":
+                    continue
+                with_tick = raw if raw.startswith("'") else "'" + raw
+                without_tick = raw[1:] if raw.startswith("'") else raw
+                for candidate in (with_tick, without_tick):
+                    if candidate not in account_values:
+                        account_values.append(candidate)
+
+            placeholders = ", ".join(["?"] * len(account_values))
             where_clauses.append(f'"ID_ACCOUNT" IN ({placeholders})')
-            # keep leading single-quote in ID_ACCOUNT values (some data stores ID_ACCOUNT like "'80656700")
-            params.extend([str(x) if str(x).startswith("'") else "'" + str(x) for x in id_account])
+            # Some parquet files keep the Excel-style leading apostrophe, others do not.
+            params.extend(account_values)
 
         # STATUS_POD (case-insensitive match)
         if selected_statuses:
@@ -433,21 +444,25 @@ class ProjectProcessorParquet:
         project_id_map = {}
         for proj in self.project_lists:
             proj_name = proj["name"]
-            # Prefer ids from the authoritative external reference CSV
-            ref_ids = self._ref_id_map.get(proj_name)
-            if ref_ids:
-                project_id_map[proj_name] = ref_ids
-            else:
-                # Fallback: use id_account already carried in project_lists
-                vals = []
-                for x in proj.get("id_account", []):
-                    s = str(x).strip()
-                    if not s.startswith("'"):
-                        s = "'" + s
+            vals = []
+            for x in proj.get("id_account", []):
+                s = str(x).strip()
+                if not s or s.lower() == "nan":
+                    continue
+                if not s.startswith("'"):
+                    s = "'" + s
+                if s not in vals:
                     vals.append(s)
+
+            if vals:
                 project_id_map[proj_name] = vals
-                if not vals:
-                    print(f"⚠️ Tidak ada id_account untuk '{proj_name}' di reference CSV maupun project_lists.")
+                continue
+
+            # Fallback only when the request did not carry selected accounts.
+            ref_ids = self._ref_id_map.get(proj_name, [])
+            project_id_map[proj_name] = ref_ids
+            if not ref_ids:
+                print(f"⚠️ Tidak ada id_account untuk '{proj_name}' di reference CSV maupun project_lists.")
 
         results = {proj["name"]: [] for proj in self.project_lists}
 
@@ -494,35 +509,6 @@ class ProjectProcessorParquet:
         for file_path in all_files:
             if debug:
                 print(f"   ⏳ Baca parquet: {file_path}")
-            # --- If FULL mode with a category filter, load file-level CATEGORY-filtered data
-            if self.full and filter_categories:
-                try:
-                    df_all = _load_filtered_parquet_with_duckdb(
-                        con,
-                        file_path,
-                        group_name=None,
-                        date_col="TGL_ENTRY",
-                        start_dt=start_date,
-                        end_dt=end_date,
-                        id_account=None,
-                        selected_statuses=None,
-                        categories=filter_categories,
-                        debug=debug,
-                    )
-                except Exception as e:
-                    print(f"Error loading parquet (category mode) {file_path}: {e}")
-                    df_all = pd.DataFrame()
-
-                if df_all is None or df_all.empty:
-                    if debug:
-                        print(f"[DEBUG] no rows returned for category filter from {file_path}")
-                else:
-                    results.setdefault("ALL_CATEGORIES", []).append(df_all)
-                    processed_chunks += 1
-
-                # move to next file (we don't split per-project in this mode)
-                continue
-
             for proj in self.project_lists:
                 proj_name = proj["name"]
                 id_accounts_clean = project_id_map[proj_name]
@@ -542,6 +528,7 @@ class ProjectProcessorParquet:
                         end_dt=end_date,
                         id_account=id_accounts_clean,
                         selected_statuses=sel_statuses,
+                        categories=filter_categories if self.full and filter_categories else None,
                         debug=debug,
                     )
                 except Exception as e:

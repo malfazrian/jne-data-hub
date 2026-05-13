@@ -269,14 +269,6 @@ class ProjectProcessor:
                         continue
 
                 # ======================================================
-                # 🔹 MODE KHUSUS: Filter by Category saja (tanpa project)
-                # ======================================================
-                if self.full and filter_categories:
-                    results.setdefault("ALL_CATEGORIES", []).append(chunk)
-                    processed_chunks += 1
-                    continue  # 🚀 skip project loop sepenuhnya
-
-                # ======================================================
                 # 🔹 PROSES PER PROJECT (default)
                 # ======================================================
                 for proj in self.project_lists:

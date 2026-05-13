@@ -128,6 +128,23 @@
       font-weight: 600;
       font-size: .95rem;
       line-height: 1.3;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-card .card-body {
+      overflow: hidden;
+    }
+
+    .file-card-content,
+    .file-title-row {
+      min-width: 0;
+    }
+
+    .file-card-recent .file-title-row {
+      padding-right: 2.5rem;
     }
 
     .star-btn {
@@ -1117,6 +1134,7 @@
       const isFavorite = userPreferences.favorites.includes(fileKey);
       const isRecent = userPreferences.recent_downloads.some(r => r.key === fileKey);
       const tagBadge = file.tag ? `<span>${file.tag}</span>` : '';
+      if (isRecent) card.classList.add('file-card-recent');
       
       card.innerHTML = `
         ${isRecent ? '<div class="recent-badge">NEW</div>' : ''}
@@ -1126,10 +1144,10 @@
             <button class="star-btn ${isFavorite ? 'active' : ''} me-2" data-filename="${file.name}" title="Favorite">
               <i class="bi bi-star-fill"></i>
             </button>
-            <div class="flex-grow-1">
-              <div class="d-flex align-items-center mb-2">
+            <div class="flex-grow-1 file-card-content">
+              <div class="d-flex align-items-center mb-2 file-title-row">
                 <i class="bi ${iconClass} file-icon me-2"></i>
-                <h6 class="mb-0 file-name">${file.name}</h6>
+                <h6 class="mb-0 file-name" title="${file.name}">${file.name}</h6>
               </div>
               <small class="text-muted d-block">
                 ${tagBadge}
