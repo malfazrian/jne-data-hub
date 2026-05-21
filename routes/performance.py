@@ -18,10 +18,10 @@ from flask import (
     flash, redirect, url_for, Response, jsonify, current_app,
 )
 
-from scripts.ref_reader import load_projects
+from scripts.ref_reader import load_projects, project_reference_mtime
 from scripts.query_performance_custom import ProjectProcessor
 from scripts.query_performance_parquet import ProjectProcessorParquet
-from scripts.lists import criteria_lists
+from scripts.lists import criteria_lists, get_criteria_lists
 from routes.shared import archive_dir
 
 performance_bp = Blueprint("performance", __name__)
@@ -257,6 +257,16 @@ def report_index():
     return render_template("index.html", projects_json=projects, project_names=project_names, mode="report")
 
 
+@performance_bp.route("/project_reference", methods=["GET"])
+def project_reference():
+    projects, project_names = load_projects()
+    return jsonify({
+        "projects": projects,
+        "project_names": project_names,
+        "mtime": project_reference_mtime(),
+    })
+
+
 @performance_bp.route("/run", methods=["POST"])
 def run():
     data = request.get_json()
@@ -297,7 +307,7 @@ def run_report():
         project_lists_json=data.get("project_lists_json", ""),
         report=True,
         project_status=data.get("project_status"),
-        criteria_lists=criteria_lists,
+        criteria_lists=get_criteria_lists(fallback=criteria_lists),
         data_source=data.get("data_source", "parquet"),
         start_date=data.get("start_date"),
         end_date=data.get("end_date"),

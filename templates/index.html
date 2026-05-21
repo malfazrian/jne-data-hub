@@ -437,6 +437,7 @@
   <script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
   <script>
     window.projects = {{ projects_json|tojson | safe }};
+    window.projectReferenceMtime = null;
     window.mode = "{{ mode }}";
     document.getElementById("year").textContent = new Date().getFullYear();
   </script>

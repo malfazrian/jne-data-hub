@@ -5,7 +5,9 @@ function normalizeName(name) {
 const STORAGE_KEY_REQ = `${window.mode || "normal"}_last_request_id`;
 const STORAGE_KEY_LIST = `project_lists_${mode}`;
 
-const projects = window.projects;
+let projects = window.projects || {};
+let projectReferenceMtime = window.projectReferenceMtime || null;
+let projectReferenceRefreshPromise = null;
 let projectList = JSON.parse(localStorage.getItem(STORAGE_KEY_LIST)) || [];
 
 const $accountChecklistWrapper = $('#account_checklist');
@@ -19,6 +21,27 @@ const $runBtn = $('#run_button');
 const $downloadBtn = $('#download_button');
 const $notifArea = $('#notif_area');
 const bar = document.getElementById("progress-bar");
+
+async function refreshProjectReference(force = false) {
+  if (projectReferenceRefreshPromise) return projectReferenceRefreshPromise;
+
+  projectReferenceRefreshPromise = fetch("/project_reference", { cache: "no-store" })
+    .then(async (resp) => {
+      if (!resp.ok) throw new Error("Gagal memuat referensi project");
+      const data = await resp.json();
+      if (force || data.mtime !== projectReferenceMtime) {
+        projects = data.projects || {};
+        window.projects = projects;
+        projectReferenceMtime = data.mtime || null;
+      }
+    })
+    .catch((err) => console.warn("Refresh project reference gagal:", err))
+    .finally(() => {
+      projectReferenceRefreshPromise = null;
+    });
+
+  return projectReferenceRefreshPromise;
+}
 
 function ensureLeadingApostrophe(id) {
     const s = String(id).trim();
@@ -111,7 +134,12 @@ function filterProjectsById(query) {
   return results.slice(0, 20);
 }
 
-$projectInput.on('input', () => {
+$projectInput.on('focus', () => {
+  refreshProjectReference();
+});
+
+$projectInput.on('input', async () => {
+  await refreshProjectReference();
   const val = $projectInput.val();
   $projectSuggestions.empty();
   if (!val.trim()) {
@@ -642,7 +670,9 @@ $('#copy_project_list_btn').on('click', () => {
 });
 
 // === Import Project List (Bulk) ===
-$('#save_import_project_btn').on('click', () => {
+$('#save_import_project_btn').on('click', async () => {
+  await refreshProjectReference();
+
   const raw = $('#import_project_textarea').val().trim();
   const $err = $('#import_error_msg');
   $err.hide();

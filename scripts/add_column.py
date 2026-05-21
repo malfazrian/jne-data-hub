@@ -1911,24 +1911,590 @@ def fix_regional_cols(df: pd.DataFrame) -> pd.DataFrame:
             )
     return df
 
+def add_SPK(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    pattern = r"(SPK\/[A-Z0-9\-]+\/\d+\/[A-Z]+\/\d+)"
+    
+    df["SPK"] = df["INTRUCTION"].str.extract(pattern)
+
+    return df
+
+def add_young_living_cols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # Ensure expected input columns exist to avoid KeyError
+    for _c in ("AWB", "NOREF", "AMOUNT", "WEIGHT", "PROVINSI", "OTMS Order", "Buyer PO", "ETD"):
+        if _c not in df.columns:
+            df[_c] = pd.NA
+
+    # Basic columns / defaults
+    df["OTMS Order"] = df.get("OTMS Order", '0').fillna('0')
+    df["Target"] = df.get("Target", "99%")
+    df["Origin_WH"] = df.get("Origin_WH", "PDU REG")
+    df["Vendor"] = df.get("Vendor", "JNE")
+
+    # No_YL from NOREF; coerce to str and strip
+    df["No_YL"] = df["NOREF"].astype(str).str.strip().replace("nan", "")
+
+    # No DSV: last 7 chars of AWB (if present)
+    df["No DSV"] = df["AWB"].fillna("").astype(str).str[-7:]
+
+    df["Buyer PO"] = df.get("Buyer PO", "")
+
+    df["City Code"] = df["OTMS Order"]
+
+    # More robust mapping for Indonesia Bagian using province keywords
+    def _map_bagian(prov):
+        p = str(prov).lower()
+        if p in ("nan", "none"):
+            return pd.NA
+
+        west_kw = (
+            "sumatera", "aceh", "riau", "kepulauan riau", "kepri", "bengkulu",
+            "lampung", "jambi", "riau", "banten", "jakarta", "jawa barat", "jawa",
+            "yogyakarta", "yogya", "bali"
+        )
+        central_kw = ("sulawesi", "kalimantan", "borneo")
+        east_kw = ("papua", "maluku", "nusa tenggara", "ntb", "ntt")
+
+        if any(k in p for k in west_kw):
+            return "Indonesia Bagian Barat"
+        if any(k in p for k in central_kw):
+            return "Indonesia Bagian Tengah"
+        if any(k in p for k in east_kw):
+            return "Indonesia Bagian Timur"
+        return "Indonesia Bagian Timur"
+
+    df["Indonesia Bagian"] = df["PROVINSI"].map(_map_bagian)
+
+    # Harga Per KG: safe numeric division, handle zero/inf
+    amt = pd.to_numeric(df["AMOUNT"], errors="coerce")
+    wt = pd.to_numeric(df["WEIGHT"], errors="coerce")
+
+    # raw price per kg
+    raw = amt / wt
+    raw = raw.replace([np.inf, -np.inf], pd.NA)
+
+    # Round up to next 1000 step (e.g., 1 -> 1000, 1001 -> 2000)
+    rounded = np.floor(raw / 1000.0) * 1000.0
+
+    # Apply only where raw is valid; keep NA otherwise
+    df["Harga Per KG"] = pd.Series(rounded).where(raw.notna())
+
+    def _coerce_datetime_with_fallback(series):
+        raw = pd.Series(series, index=df.index)
+        raw_text = raw.astype(str).str.strip()
+        dayfirst_mask = raw_text.str.match(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}")
+
+        parsed = pd.to_datetime(raw, errors="coerce", format="mixed")
+        if dayfirst_mask.any():
+            parsed.loc[dayfirst_mask] = pd.to_datetime(
+                raw.loc[dayfirst_mask], errors="coerce", format="mixed", dayfirst=True
+            )
+
+        missing = parsed.isna() & raw.notna() & raw.astype(str).str.strip().ne("")
+        if missing.any():
+            parsed_dayfirst = pd.to_datetime(
+                raw.loc[missing], errors="coerce", format="mixed", dayfirst=True
+            )
+            parsed.loc[missing] = parsed_dayfirst
+        return parsed
+
+    # Ensure datetime columns before arithmetic
+    df["TGL_RECEIVED_RAW_DEBUG"] = df.get("TGL_RECEIVED", pd.NA)
+    df["TGL_ENTRY_RAW_DEBUG"] = df.get("TGL_ENTRY", pd.NA)
+    df["TGL_RECEIVED"] = _coerce_datetime_with_fallback(df.get("TGL_RECEIVED", pd.NA))
+    df["TGL_ENTRY"] = _coerce_datetime_with_fallback(df.get("TGL_ENTRY", pd.NA))
+
+    mask_success = (
+        df["STATUS_POD"].astype(str).str.strip().str.lower().eq("success")
+        if "STATUS_POD" in df.columns
+        else pd.Series(False, index=df.index)
+    )
+    mask_success_dates = mask_success & df["TGL_RECEIVED"].notna() & df["TGL_ENTRY"].notna()
+
+    # ATA and LEAD TIME only for successful deliveries
+    df["ATA"] = pd.NA
+    df["LEAD TIME"] = pd.NA
+    if mask_success_dates.any():
+        if "TIME_RECEIVED" in df.columns:
+            df.loc[mask_success_dates, "ATA"] = df.loc[mask_success_dates, "TIME_RECEIVED"]
+        df.loc[mask_success_dates, "LEAD TIME"] = (
+            df.loc[mask_success_dates, "TGL_RECEIVED"] - df.loc[mask_success_dates, "TGL_ENTRY"]
+        ).dt.days
+
+    # SLA_: ensure ETD numeric
+    df["SLA_"] = pd.to_numeric(df.get("ETD", pd.NA), errors="coerce")
+
+    df["REMARK_YL"] = np.where(mask_success, "OK", pd.NA)
+
+    df["AWB 2"] = df["AWB"].astype(str).str.strip().replace("nan", "")
+
+    df["TODAY DATE"] = pd.Timestamp.today().normalize()
+
+    df["Overday Before Holiday"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+    df.loc[mask_success_dates, "Overday Before Holiday"] = (
+        df.loc[mask_success_dates, "TGL_RECEIVED"] - df.loc[mask_success_dates, "TGL_ENTRY"]
+    ).dt.days.add(1).astype("Int64")
+
+    # --- Load holiday list ---
+    holiday_path = r"//192.168.9.76/d/RYAN/1. References/Holiday.xlsx"
+    try:
+        holidays = pd.read_excel(holiday_path, sheet_name="Holiday", usecols="A")
+        holidays = pd.to_datetime(holidays.iloc[:, 0], errors="coerce").dropna().dt.normalize()
+        holidays = holidays.values.astype("datetime64[D]")
+    except Exception as e:
+        print(f"[!] Gagal baca holiday file: {e}")
+        holidays = np.array([], dtype="datetime64[D]")
+
+    success_count = int(mask_success.sum())
+    success_valid_dates_count = int(mask_success_dates.sum())
+    success_missing_entry_count = int((mask_success & df["TGL_ENTRY"].isna()).sum())
+    success_missing_received_count = int((mask_success & df["TGL_RECEIVED"].isna()).sum())
+    print(
+        "[YL DEBUG] "
+        f"rows={len(df)}, success={success_count}, "
+        f"success_valid_dates={success_valid_dates_count}, "
+        f"success_missing_TGL_ENTRY={success_missing_entry_count}, "
+        f"success_missing_TGL_RECEIVED={success_missing_received_count}, "
+        f"holidays_loaded={len(holidays)}"
+    )
+    if success_count and success_valid_dates_count == 0:
+        sample_cols = [
+            "AWB", "STATUS_POD", "TGL_ENTRY_RAW_DEBUG", "TGL_ENTRY",
+            "TGL_RECEIVED_RAW_DEBUG", "TGL_RECEIVED"
+        ]
+        sample_cols = [col for col in sample_cols if col in df.columns]
+        print("[YL DEBUG] Sample success tanpa tanggal valid:")
+        print(df.loc[mask_success, sample_cols].head(10).to_string(index=False))
+
+    # --- Helper: networkdays ---
+    def networkdays(start, end):
+        if pd.isna(start) or pd.isna(end):
+            return pd.NA
+        try:
+            start_dt = pd.to_datetime(start)
+            end_dt = pd.to_datetime(end)
+
+            # NORMALISASI KE TANGGAL SAJA
+            start_date = np.datetime64(start_dt.normalize().date(), "D")
+            end_date = np.datetime64(end_dt.normalize().date(), "D")
+
+            if end_date < start_date:
+                return 0
+
+            return np.busday_count(
+                start_date,
+                end_date + np.timedelta64(1, "D"),
+                holidays=holidays,
+            )
+        except Exception:
+            return pd.NA
+
+    df["Overday Success After Holiday"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+    df.loc[mask_success_dates, "Overday Success After Holiday"] = (
+        df.loc[mask_success_dates]
+        .apply(lambda row: networkdays(row["TGL_ENTRY"], row["TGL_RECEIVED"]), axis=1)
+        .astype("Int64")
+    )
+
+    df["Total Tgl Merah"] = pd.Series(pd.NA, index=df.index, dtype="Int64")
+    mask_total_tgl_merah = (
+        df["Overday Success After Holiday"].notna()
+        & df["Overday Before Holiday"].notna()
+    )
+    df.loc[mask_total_tgl_merah, "Total Tgl Merah"] = (
+        df.loc[mask_total_tgl_merah, "Overday Before Holiday"]
+        - df.loc[mask_total_tgl_merah, "Overday Success After Holiday"]
+    ).astype("Int64")
+    negative_total_count = int((df["Total Tgl Merah"].dropna() < 0).sum())
+
+    print(
+        "[YL DEBUG] "
+        f"overday_before_filled={int(df['Overday Before Holiday'].notna().sum())}, "
+        f"overday_after_filled={int(df['Overday Success After Holiday'].notna().sum())}, "
+        f"total_tgl_merah_filled={int(df['Total Tgl Merah'].notna().sum())}, "
+        f"total_tgl_merah_negative={negative_total_count}"
+    )
+    if success_valid_dates_count and df["Total Tgl Merah"].isna().all():
+        sample_cols = [
+            "AWB", "STATUS_POD", "TGL_ENTRY", "TGL_RECEIVED",
+            "Overday Before Holiday", "Overday Success After Holiday", "Total Tgl Merah"
+        ]
+        sample_cols = [col for col in sample_cols if col in df.columns]
+        print("[YL DEBUG] Sample overday yang gagal isi Total Tgl Merah:")
+        print(df.loc[mask_success_dates, sample_cols].head(10).to_string(index=False))
+
+    df.drop(columns=["TGL_RECEIVED_RAW_DEBUG", "TGL_ENTRY_RAW_DEBUG"], inplace=True, errors="ignore")
+    mask_fail = (
+        mask_success
+        & df["SLA_"].notna()
+        & df["LEAD TIME"].notna()
+        & (df["LEAD TIME"] > df["SLA_"])
+    )
+
+    df["Status Delivery"] = np.select(
+        [
+            ~mask_success,
+            mask_success & df["TGL_RECEIVED"].isna(),
+            mask_fail,
+        ],
+        [
+            pd.NA,
+            "On Process",
+            "Fail",
+        ],
+        default="Achieve",
+    )
+
+    # MOD: LEAD TIME <= 0 → SDS, LEAD TIME = 1 → NDS, LEAD TIME = 2 → H+2, LEAD TIME > 2 → H++
+    df["MOD"] = np.where(
+        df["LEAD TIME"].notna(),
+        np.where(
+            df["LEAD TIME"] <= 0, "SDS",
+            np.where(
+                df["LEAD TIME"] == 1, "NDS",
+                np.where(df["LEAD TIME"] == 2, "H+2", "H++")
+            )
+        ),
+        pd.NA
+    )
+
+    return df
+
+def add_rodamas_cols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    df["NAMA ORIGIN"] = "JNE DKI JAKARTA"
+    df["CUSTOMER"] = "HO"
+
+    return df
+
+def add_bni_kategori(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    if "GOODS_DESCR" not in df.columns:
+        print("Kolom 'GOODS_DESCR' tidak ditemukan, tidak bisa menambahkan KATEGORI BNI.")
+        return df
+
+    pattern = r"ULANG TAHUN|ULTAH|UCAPAN"
+
+    mask = (
+        df["GOODS_DESCR"]
+        .fillna("")
+        .astype(str)
+        .str.upper()
+        .str.contains(pattern, regex=True, na=False)
+    )
+
+    df["BNI_KATEGORI"] = "REGULER"
+    df.loc[mask, "BNI_KATEGORI"] = "ATENSI ULANG TAHUN"
+
+    return df
+
+def add_mandiri_cols(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    df_area = pd.DataFrame()
+    try:
+        df_area = pd.read_excel(r"D:\RYAN\1. References\Mandiri\Table Area OOB.xlsx")
+    except Exception as e:
+        print(f"Gagal membaca file area Mandiri: {e}")
+        return df
+
+    # Tambah kolom untuk AREA MANDIRI dan SLA OOB berdasarkan REGIONAL = REGION di df_area
+    if "REGIONAL" not in df.columns:
+        print("Kolom 'REGIONAL' tidak ditemukan, tidak bisa menambahkan AREA MANDIRI.")
+        df["AREA MANDIRI"] = pd.NA
+        return df
+
+    required_cols = {"REGION", "AREA MANDIRI", "SLA"}
+    if not required_cols.issubset(df_area.columns):
+        print("File area Mandiri tidak memiliki kolom REGION, AREA MANDIRI, dan SLA OOB.")
+        return df
+    
+    df = df.merge(
+        df_area[["REGION", "AREA MANDIRI", "SLA"]],
+        how="left",
+        left_on="REGIONAL",
+        right_on="REGION",
+    )
+    df.drop(columns=["REGION"], inplace=True)
+    df.rename(columns={"SLA": "SLA OOB"}, inplace=True)
+
+    # Hitung kolom CARRER berdasarkan SLA OOB - AGING < 0 → "OVER SLA", else "On Time SLA"
+    df["CARRER"] = np.where(
+        df["SLA OOB"] - df["AGING"] < 0,
+        "Over SLA",
+        "On Time SLA"
+    )
+
+    return df
+
+def fix_contact_notelp_col(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    if "CONTACT" not in df.columns or "NOTELP" not in df.columns:
+        print("Kolom 'CONTACT' atau 'NOTELP' tidak ditemukan, tidak bisa memperbaiki CONTACT_NOTELP.")
+        return df
+
+    df["CONTACT"] = "*****"
+    df["NOTELP"] = "*****"
+
+    return df
+
+def fix_empty_date_1st_attempt(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    if "DATE_1ST_ATTEMPT" not in df.columns:
+        print("Kolom 'DATE_1ST_ATTEMPT' tidak ditemukan, tidak bisa memperbaiki DATE_1ST_ATTEMPT.")
+        return df
+
+    # Ganti nilai kosong atau NaN di DATE_1ST_ATTEMPT menjadi TGL_RECEIVED hanya jika STATUS_POD = "Success"
+    if "STATUS_POD" in df.columns and "TGL_RECEIVED" in df.columns:
+        mask = (
+            df["STATUS_POD"].astype(str).str.strip().eq("Success") &
+            df["DATE_1ST_ATTEMPT"].isna()
+        )
+        df.loc[mask, "DATE_1ST_ATTEMPT"] = df.loc[mask, "TGL_RECEIVED"]
+
+    return df
+
+def add_3lc_dest_fw(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    if "DEST_FW" not in df.columns:
+        print("Kolom 'DEST_FW' tidak ditemukan, tidak bisa menambahkan 3 LC DEST FW.")
+        return df
+    
+    df["3 LC DEST FW"] = df["DEST_FW"].str[:3]
+
+    return df
+
+def add_rounded_weight(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    if "WEIGHT" not in df.columns:
+        print("Kolom 'WEIGHT' tidak ditemukan.")
+        return df
+
+    df["WEIGHT"] = pd.to_numeric(df["WEIGHT"], errors="coerce")
+
+    rounded = np.where(
+        (df["WEIGHT"] % 1) > 0.3,
+        np.ceil(df["WEIGHT"]),
+        np.floor(df["WEIGHT"])
+    )
+
+    # Pastikan minimal 1
+    df["WEIGHT"] = np.maximum(1, rounded)
+
+    return df
+
+def add_status_pod_c01(df: pd.DataFrame, debug: bool = False) -> pd.DataFrame:
+    df = df.copy()
+
+    if "STATUS_POD" not in df.columns:
+        raise ValueError("Missing required columns: ['STATUS_POD']")
+    if "CODING" not in df.columns:
+        df["CODING"] = pd.NA
+    if "STATUS_POD_UPDATE" not in df.columns:
+        df["STATUS_POD_UPDATE"] = df["STATUS_POD"]
+    
+    if debug:
+        print("Kolom awal:", df.columns.tolist())
+        print(f"STATUS_POD_UPDATE unique values: {df['STATUS_POD_UPDATE'].unique().tolist()}")
+
+    # Tambahkan kolom STATUS_POD_UPDATE berdasarkan logika khusus untuk CODING 'C01' dan 'C02'
+    def status_pod_update(row):
+        try:
+            coding = str(row["CODING"]).strip() if pd.notna(row["CODING"]) else None
+            status_pod = row["STATUS_POD_UPDATE"] if pd.notna(row["STATUS_POD_UPDATE"]) else ""
+            if coding == "C01":
+                return "Claim Missing"
+            elif coding == "C02":
+                return "Claim Damage"
+            else:
+                return status_pod
+        except Exception as e:
+            print(f"Error in status_pod_update for row: {e}")
+            return "Error"
+    try:
+        df["STATUS_POD_UPDATE"] = df.apply(status_pod_update, axis=1)
+        if debug: print("STATUS_POD_UPDATE done")
+        if debug: print(f"STATUS_POD_UPDATE unique values: {df['STATUS_POD_UPDATE'].unique().tolist()}")
+    except Exception as e:
+        raise ValueError(f"Error in STATUS_POD_UPDATE: {e}")
+    
+    # -----------------------------
+    # Replace STATUS_POD with STATUS_POD_UPDATE
+    # -----------------------------
+    if "STATUS_POD_UPDATE" in df.columns:
+        if "STATUS_POD" in df.columns:
+            df = df.drop(columns=["STATUS_POD"])
+        df = df.rename(columns={"STATUS_POD_UPDATE": "STATUS_POD"})
+
+    return df
+
+def add_reason_1st_attempt(df: pd.DataFrame, ref_path: str, sheet_name: str = "Coding Undel") -> pd.DataFrame:
+    df = df.copy()
+
+    if "RESULT_1ST_ATTEMPT" not in df.columns:
+        print("Kolom 'RESULT_1ST_ATTEMPT' tidak ditemukan, tidak bisa menambahkan REASON_1ST_ATTEMPT.")
+        return df
+
+    ref = pd.read_excel(ref_path, sheet_name=sheet_name)
+
+    if "Coding Undel" not in ref.columns or "Remark_Bahasa" not in ref.columns:
+        print("Sheet referensi tidak punya kolom 'Coding Undel' dan/atau 'Remark_Bahasa'")
+        return df
+
+    ref = ref[["Coding Undel", "Remark_Bahasa"]].drop_duplicates()
+
+    df = df.merge(
+        ref,
+        left_on="RESULT_1ST_ATTEMPT",
+        right_on="Coding Undel",
+        how="left",
+        validate="m:1"
+    )
+
+    df = df.drop(columns=["Coding Undel"])
+    df = df.rename(columns={"Remark_Bahasa": "REASON_1ST_ATTEMPT"})
+
+    # hanya isi jika diawali 'U'
+    mask = df["RESULT_1ST_ATTEMPT"].astype(str).str.startswith("U")
+    df.loc[~mask, "REASON_1ST_ATTEMPT"] = np.nan
+
+    return df
+
+def add_wilayah(
+    df: pd.DataFrame,
+    ref: str = r"\\192.168.9.76\D\RYAN\1. References\Table Reference.xlsx"
+) -> pd.DataFrame:
+    """
+    Menambahkan kolom WILAYAH berdasarkan DEST dan referensi REGION (sheet ZONA)
+    """
+
+    df = df.copy()
+
+    # ===============================
+    # Validasi kolom utama
+    # ===============================
+    if "DEST" not in df.columns:
+        print("Sheet MASTER tidak memiliki kolom DEST.")
+        return df
+
+    try:
+        # ===============================
+        # Load reference
+        # ===============================
+        ref_df = pd.read_excel(ref, sheet_name="ZONA")
+
+        required_cols = {"DEST", "REGION"}
+        if not required_cols.issubset(ref_df.columns):
+            print("Sheet ZONA tidak memiliki kolom DEST atau REGION.")
+            return df
+
+        # ===============================
+        # Normalisasi data
+        # ===============================
+        df["DEST"] = df["DEST"].astype(str).str.strip()
+        ref_df["DEST"] = ref_df["DEST"].astype(str).str.strip()
+
+        # ===============================
+        # Ambil DEST unik
+        # ===============================
+        ref_df = (
+            ref_df[["DEST", "REGION"]]
+            .drop_duplicates(subset="DEST")
+            .rename(columns={"REGION": "REGION_REF"})
+        )
+
+        # ===============================
+        # Merge
+        # ===============================
+        df = df.merge(ref_df, how="left", on="DEST")
+
+        # ===============================
+        # Mapping wilayah
+        # ===============================
+        wilayah_map = {
+            "Regional Jakarta": "Jabodetabekcil",
+            "Regional Bodetabekcil": "Jabodetabekcil",
+            "Regional Jawa Barat": "Pulau Jawa",
+            "Regional Jateng Diy": "Pulau Jawa",
+        }
+
+        df["WILAYAH"] = (
+            df["REGION_REF"]
+            .map(wilayah_map)
+            .fillna("Luar Pulau Jawa")
+        )
+
+        # ===============================
+        # Cleanup
+        # ===============================
+        df.drop(columns=["REGION_REF"], inplace=True)
+
+    except Exception as e:
+        print(f"Gagal menambahkan WILAYAH: {e}")
+
+    return df
+
+def add_coding_remarks(df: pd.DataFrame, ref=r"\\192.168.9.76\D\RYAN\1. References\Table Reference.xlsx") -> pd.DataFrame:
+    df = df.copy()
+    
+    if "CODING" not in df.columns:
+        print("Kolom 'CODING' tidak ditemukan, tidak bisa menambahkan CODING_REMARKS.")
+        return df
+
+    try:
+        ref_df = pd.read_excel(ref, sheet_name="STATUS_CCC", header=1)
+        if not {"CODE", "STATUS"}.issubset(ref_df.columns):
+            print("Kolom referensi tidak lengkap")
+            return df
+
+        # Buat kolom default kosong
+        df["CODING_REMARKS"] = None  
+
+        # Ambil semua baris dengan CODING yang tidak kosong
+        df_d = df.loc[df["CODING"].notnull()].merge(
+            ref_df[["CODE", "STATUS"]],
+            how="left",
+            left_on="CODING",
+            right_on="CODE"
+        )
+
+        df.loc[df["CODING"].notnull(), "CODING_REMARKS"] = df_d["STATUS"].values
+
+    except Exception as e:
+        print(f"Gagal menambahkan informasi CODING_REMARKS: {e}")
+
+    return df
+
 # ------------------- MAPPING KOMPONEN TRANSFORMASI -------------------
 TRANSFORM_GROUPS = {
-    # Group yang hasilkan banyak kolom sekaligus
     "ORIGIN_CITY_GROUP": {
         "cols": ["ORIGIN_CITY", "ORIGIN_CITY_2", "3_LC_ORIGIN", "PROVINSI_ORIGIN", "REGION", "KODE_POS_ORI"],
         "func": lambda df, ref: add_origin_city(df, ref),
     },
     "PROVINCE_GROUP": {
-        "cols": ["KECAMATAN", "NAMA KAB/KOTA", "PROVINSI", "KODE_POS"],
+        "cols": ["KECAMATAN", "NAMA KAB/KOTA", "PROVINSI", "KODE POS"],
         "func": lambda df, ref: add_province_zipcode(df, ref),
     },
     "PERIODE_GROUP": {
-        "cols": ["DAY", "PERIODE", "WEEK", "WEEK_OF_YEAR"],
+        "cols": ["DAY", "PERIODE", "WEEK", "WEEK_OF_YEAR", "TIME_ENTRY"],
         "func": lambda df, ref: add_periode(df),
     },
     "TGL_RECEIVED_GROUP": {
         "cols": ["DATE_RECEIVED", "TIME_RECEIVED"],
         "func": lambda df, ref: add_date_time_received(df),
+    },
+    "AGING_CARRER_GROUP": {
+        "cols": ["AGING_1ST", "CAREER_1ST", "AGING_POD", "CARRER_POD"],
+        "func": lambda df, ref: add_aging_carrer(df),
     },
     "AJ_CAR_GROUP": {
         "cols": ["AJ Car Status", "KETERANGAN AJ CAR", "Remark Return"],
@@ -1941,13 +2507,28 @@ TRANSFORM_GROUPS = {
     "SOCIOLLA_GROUP": {
         "cols": ["DIM", "DIM - Copy"],
         "func": lambda df, ref: add_sociolla_cols(df)
+    },
+    "YOUNG_LIVING_GROUP": {
+        "cols": ["OTMS Order", "Target", "Origin_WH", "Vendor", "No_YL", "No DSV", "Buyer PO", "Indonesia Bagian", "City Code", "Harga Per KG", "ATA", "LEAD TIME", "SLA_", "REMARK_YL", "AWB 2"],
+        "func": lambda df, ref: add_young_living_cols(df)
+    },
+    "RODAMAS_GROUP": {
+        "cols": ["NAMA ORIGIN", "CUSTOMER"],
+        "func": lambda df, ref: add_rodamas_cols(df)
+    },
+    "FIX_CONTACT_NOTELP_GROUP": {
+        "cols": ["CONTACT", "NOTELP"],
+        "func": lambda df, ref: fix_contact_notelp_col(df)
+    },
+    "MANDIRI_GROUP": {
+        "cols": ["AREA MANDIRI", "SLA OOB"],
+        "func": lambda df, ref: add_mandiri_cols(df)
     }
 }
 
-# Fungsi yang hanya hasilkan satu kolom
 TRANSFORM_FUNCS = {
     "ADDRESS": lambda df, ref: add_address(df, "ADDRESS"),
-    "STATUS_POD": lambda df, ref: add_status_pod(df),
+    "STATUS_POD": lambda df, ref: add_status_pod_c01(df),
     "CUST_NAME": lambda df, ref: add_cust_name(df),
     "STATUS_LATLONG": lambda df, ref: add_status_latlong(df),
     "ETA": lambda df, ref: add_eta(df),
@@ -1963,5 +2544,14 @@ TRANSFORM_FUNCS = {
     "DATE_RECEIVE_REQUEST": lambda df, ref: add_date_receive_request(df),
     "DESCR_RETURN": lambda df, ref: add_descr_return(df),
     "UPDATE_TIME": lambda df, ref: add_update_time(df),
-    "GROUPING_STATUS": lambda df, ref: add_grouping_status(df)
+    "GROUPING_STATUS": lambda df, ref: add_grouping_status(df),
+    "SPK": lambda df, ref: add_SPK(df),
+    "REASON_1ST_ATTEMPT": lambda df, ref: add_reason_1st_attempt(df, ref),
+    "WILAYAH": lambda df, ref: add_wilayah(df, ref),
+    "DATE_1ST_ATTEMPT": lambda df, ref: fix_empty_date_1st_attempt(df),
+    "3 LC DEST FW": lambda df, ref: add_3lc_dest_fw(df),
+    "WEIGHT": lambda df, ref: add_rounded_weight(df),
+    "REASON UNDEL": lambda df, ref: add_reason_undel(df, ref),
+    "BNI_KATEGORI": lambda df, ref: add_bni_kategori(df),
+    "CODING_REMARKS": lambda df, ref: add_coding_remarks(df)
 }

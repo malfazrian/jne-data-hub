@@ -1,22 +1,57 @@
-import pandas as pd
 import os
+import threading
 
-def auto_update_project_reference():
-    # Path sumber dan target
+import pandas as pd
+
+
+_project_ref_lock = threading.Lock()
+
+
+def _project_ref_target_path():
+    return os.getenv("PROJECT_REF_CSV", os.path.join("data", "project_reference.csv"))
+
+
+def _file_mtime(path):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return None
+
+def auto_update_project_reference(force=False):
     src_excel = os.getenv("PROJECT_REF_SOURCE", "")
-    sheet_name = "ACC & SHIPPER GROUPING"
-    target_csv = r"data\project_reference.csv"
+    if not src_excel:
+        return False
 
-    # Baca sheet
-    df = pd.read_excel(src_excel, sheet_name=sheet_name, dtype=str)
-    # Rename kolom CUST_ID_2 ke CUST_ID, kolom lain biarkan
-    df = df.rename(columns={"CUST_ID_2": "CUST_ID"})
-    # Pilih kolom yang dibutuhkan (pastikan urutan sesuai kebutuhan)
-    needed_cols = ["CUST_ID", "CUST_NAME", "BIG_GROUPING_CUST", "CATEGORY"]
-    df_out = df[needed_cols]
-    # Simpan ke CSV
-    df_out.to_csv(target_csv, index=False, encoding="utf-8")
-    print(f"✅ project_reference.csv berhasil diupdate dari {src_excel}")
+    sheet_name = os.getenv("PROJECT_REF_SHEET", "ACC & SHIPPER GROUPING")
+    target_csv = _project_ref_target_path()
+
+    with _project_ref_lock:
+        src_mtime = _file_mtime(src_excel)
+        if src_mtime is None:
+            print(f"[WARN] PROJECT_REF_SOURCE tidak bisa diakses: {src_excel}")
+            return False
+
+        target_mtime = _file_mtime(target_csv)
+        if not force and target_mtime is not None and target_mtime >= src_mtime:
+            return False
+
+        target_dir = os.path.dirname(target_csv)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+
+        df = pd.read_excel(src_excel, sheet_name=sheet_name, dtype=str)
+        df = df.rename(columns={"CUST_ID_2": "CUST_ID"})
+        needed_cols = ["CUST_ID", "CUST_NAME", "BIG_GROUPING_CUST", "CATEGORY"]
+        missing = [col for col in needed_cols if col not in df.columns]
+        if missing:
+            raise ValueError(f"Kolom wajib hilang di PROJECT_REF_SOURCE: {missing}")
+
+        df_out = df[needed_cols]
+        tmp_csv = target_csv + ".tmp"
+        df_out.to_csv(tmp_csv, index=False, encoding="utf-8-sig")
+        os.replace(tmp_csv, target_csv)
+        print(f"[OK] project_reference.csv berhasil diupdate dari {src_excel}")
+        return True
 
 #PIVOT CONFIGS
 pivot_standard = [

@@ -212,6 +212,15 @@
       overflow: auto;
     }
 
+    .project-pic-table-wrap {
+      max-height: 60vh;
+      overflow: auto;
+    }
+
+    .project-pic-count {
+      white-space: nowrap;
+    }
+
     @keyframes pop {
       0% { transform: scale(1); }
       50% { transform: scale(1.4); }
@@ -289,11 +298,16 @@
         <p class="text-muted mb-0">
           Lihat, cari, dan download report yang sudah diproduksi.
         </p>
+        <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-primary" id="projectPicBtn" type="button">
+          <i class="bi bi-people-fill me-1"></i> Project PIC
+        </button>
         {% if is_admin %}
         <button class="history-info-btn" id="historyInfoBtn" type="button" title="Lihat status query dan edit report">
           ℹ️
         </button>
         {% endif %}
+        </div>
       </div>
 
       <!-- Filter Section -->
@@ -425,6 +439,72 @@
     </div>
   </div>
 
+  <div class="modal fade" id="projectPicModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title">
+              <i class="bi bi-people-fill me-2"></i> Project PIC
+            </h5>
+            <small class="text-muted" id="projectPicMeta"></small>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2 align-items-center mb-3">
+            <div class="col-md-3">
+              <label class="form-label">Search by</label>
+              <select id="projectPicSearchBy" class="form-select">
+                <option value="all">Semua Kolom</option>
+                <option value="project">Project</option>
+                <option value="pic_data_support">PIC Data Support</option>
+                <option value="pic_back_up">PIC Back Up</option>
+              </select>
+            </div>
+            <div class="col-md-7">
+              <label class="form-label">Search</label>
+              <input type="text" id="projectPicSearchInput" class="form-control" placeholder="Ketik keyword...">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label d-block">&nbsp;</label>
+              <button class="btn btn-outline-secondary w-100" id="projectPicClearBtn" type="button">
+                <i class="bi bi-x-circle me-1"></i> Clear
+              </button>
+            </div>
+          </div>
+
+          <div id="projectPicLoading" class="text-center py-4" style="display: none;">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2 mb-0">Memuat Project PIC...</p>
+          </div>
+          <div id="projectPicError" class="alert alert-danger" style="display: none;"></div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small text-muted project-pic-count" id="projectPicCount"></span>
+          </div>
+          <div id="projectPicTableWrap" class="project-pic-table-wrap" style="display: none;">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th>Project</th>
+                  <th>PIC Data Support</th>
+                  <th>PIC Back Up</th>
+                </tr>
+              </thead>
+              <tbody id="projectPicTableBody"></tbody>
+            </table>
+          </div>
+          <div id="projectPicEmpty" class="text-center py-5" style="display: none;">
+            <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+            <p class="text-muted mt-3 mb-0">Data tidak ditemukan.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {% if is_admin %}
   <div class="modal fade" id="historyStatusModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -446,10 +526,6 @@
 
           <!-- Parquet source status -->
           <div id="parquetSourceSection" class="mb-4" style="display: none;">
-            <h6 class="fw-semibold text-secondary mb-2">
-              <i class="bi bi-database me-1"></i> Status Sumber Data Parquet
-              <small class="fw-normal ms-2" id="parquetLogNote"></small>
-            </h6>
             <div class="row g-2 mb-2">
               <div class="col-4">
                 <div class="card border-0 shadow-sm h-100">
@@ -585,11 +661,36 @@
     let tagSelect = null;
     const isAdmin = document.body.dataset.isAdmin === 'true';
     let historyStatusRows = [];
+    let projectPicRows = [];
+    let projectPicLoaded = false;
 
     // Load user preferences and files when page loads
     document.addEventListener('DOMContentLoaded', async function() {
       await loadUserPreferences();
       await loadFiles();
+
+      const projectPicBtn = document.getElementById('projectPicBtn');
+      if (projectPicBtn) {
+        projectPicBtn.addEventListener('click', openProjectPicModal);
+      }
+
+      const projectPicSearchInput = document.getElementById('projectPicSearchInput');
+      const projectPicSearchBy = document.getElementById('projectPicSearchBy');
+      const projectPicClearBtn = document.getElementById('projectPicClearBtn');
+      if (projectPicSearchInput) {
+        projectPicSearchInput.addEventListener('input', renderProjectPicRows);
+      }
+      if (projectPicSearchBy) {
+        projectPicSearchBy.addEventListener('change', renderProjectPicRows);
+      }
+      if (projectPicClearBtn) {
+        projectPicClearBtn.addEventListener('click', function() {
+          projectPicSearchInput.value = '';
+          projectPicSearchBy.value = 'all';
+          renderProjectPicRows();
+          projectPicSearchInput.focus();
+        });
+      }
 
       if (isAdmin) {
         const historyInfoBtn = document.getElementById('historyInfoBtn');
@@ -608,13 +709,90 @@
         .replace(/'/g, '&#39;');
     }
 
+    async function openProjectPicModal() {
+      const modalEl = document.getElementById('projectPicModal');
+      const loadingEl = document.getElementById('projectPicLoading');
+      const errorEl = document.getElementById('projectPicError');
+      const tableWrapEl = document.getElementById('projectPicTableWrap');
+      const emptyEl = document.getElementById('projectPicEmpty');
+      const countEl = document.getElementById('projectPicCount');
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+      errorEl.style.display = 'none';
+      emptyEl.style.display = 'none';
+      modal.show();
+
+      if (projectPicLoaded) {
+        renderProjectPicRows();
+        return;
+      }
+
+      loadingEl.style.display = 'block';
+      tableWrapEl.style.display = 'none';
+      countEl.textContent = '';
+
+      try {
+        const response = await fetch('/project_pic');
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Gagal memuat Project PIC.');
+        }
+
+        projectPicRows = data.rows || [];
+        projectPicLoaded = true;
+        renderProjectPicRows();
+      } catch (error) {
+        errorEl.textContent = error.message || 'Gagal memuat Project PIC.';
+        errorEl.style.display = 'block';
+      } finally {
+        loadingEl.style.display = 'none';
+      }
+    }
+
+    function renderProjectPicRows() {
+      const searchInput = document.getElementById('projectPicSearchInput');
+      const searchBy = document.getElementById('projectPicSearchBy');
+      const tbodyEl = document.getElementById('projectPicTableBody');
+      const tableWrapEl = document.getElementById('projectPicTableWrap');
+      const emptyEl = document.getElementById('projectPicEmpty');
+      const countEl = document.getElementById('projectPicCount');
+      const query = (searchInput.value || '').trim().toLowerCase();
+      const column = searchBy.value || 'all';
+
+      let filtered = projectPicRows;
+      if (query) {
+        filtered = projectPicRows.filter(row => {
+          if (column === 'all') {
+            return [row.project, row.pic_data_support, row.pic_back_up]
+              .some(value => String(value || '').toLowerCase().includes(query));
+          }
+          return String(row[column] || '').toLowerCase().includes(query);
+        });
+      }
+
+      tbodyEl.innerHTML = '';
+      filtered.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(row.project)}</td>
+          <td>${escapeHtml(row.pic_data_support)}</td>
+          <td>${escapeHtml(row.pic_back_up)}</td>
+        `;
+        tbodyEl.appendChild(tr);
+      });
+
+      countEl.textContent = `${filtered.length} dari ${projectPicRows.length} project`;
+      tableWrapEl.style.display = filtered.length ? 'block' : 'none';
+      emptyEl.style.display = filtered.length ? 'none' : 'block';
+    }
+
     async function openHistoryStatusModal() {
       const modalEl = document.getElementById('historyStatusModal');
       const loadingEl = document.getElementById('historyStatusLoading');
       const errorEl = document.getElementById('historyStatusError');
       const parquetSectionEl = document.getElementById('parquetSourceSection');
       const parquetDividerEl = document.getElementById('parquetDivider');
-      const parquetLogNoteEl = document.getElementById('parquetLogNote');
       const parquetTotalExcelEl = document.getElementById('parquetTotalExcel');
       const parquetTotalDoneEl = document.getElementById('parquetTotalDone');
       const parquetTotalPendingEl = document.getElementById('parquetTotalPending');
@@ -656,7 +834,6 @@
           parquetTotalExcelEl.textContent = String(pd.total_excel);
           parquetTotalDoneEl.textContent = String(pd.total_done);
           parquetTotalPendingEl.textContent = String(pd.total_failed + pd.total_unprocessed);
-          parquetLogNoteEl.textContent = pd.log_exists ? '' : '(log tidak ditemukan)';
           parquetMonthRowsEl.innerHTML = '';
           (pd.months || []).forEach(m => {
             const dirNote = m.dir_exists ? '' : ' <small class="text-muted">(dir tidak ada)</small>';
@@ -700,9 +877,6 @@
         countQueryEl.textContent = String(querySuccess);
         countEditEl.textContent = String(editSuccess);
         countersEl.style.display = 'flex';
-
-        metaEl.textContent = `Sumber: ${data.source} | Patokan hari ini: ${data.today}`;
-        metaEl.style.display = 'block';
 
         // Store rows for sorting
         historyStatusRows = data.rows;

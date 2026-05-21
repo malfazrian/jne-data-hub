@@ -18,6 +18,7 @@ from flask import (
 
 from scripts import backup_syncer
 from routes.shared import (
+    BASE_DIR,
     PROCESS_HISTORY_SOURCE, PARQUET_PROCESSED_FILE,
     PARQUET_SOURCE_BASE, REPORT_EXPLORER_BASE,
     _BULAN, _prefs_lock, _load_prefs_internal, _save_prefs_internal,
@@ -218,6 +219,64 @@ def load_report_history_rows():
     return result
 
 
+def _find_project_pic_file():
+    data_dir = os.path.join(BASE_DIR, "data")
+    candidates = [
+        os.path.join(data_dir, "PROJECT PIC.xlsx"),
+        os.path.join(data_dir, "project_PIC.xlsx"),
+        os.path.join(data_dir, "project_pic.xlsx"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+
+    if os.path.isdir(data_dir):
+        for name in os.listdir(data_dir):
+            if name.startswith("~$"):
+                continue
+            if name.lower() == "project pic.xlsx" or name.lower() == "project_pic.xlsx":
+                return os.path.join(data_dir, name)
+    return candidates[0]
+
+
+def load_project_pic_rows():
+    source_path = _find_project_pic_file()
+    if not os.path.exists(source_path):
+        raise FileNotFoundError(source_path)
+
+    import pandas as pd
+
+    required_columns = ["BIG_GROUPING_CUST", "PIC SUPPORT DATA", "PIC BACK UP"]
+    workbook = pd.ExcelFile(source_path)
+    selected_df = None
+
+    for sheet_name in workbook.sheet_names:
+        df = pd.read_excel(source_path, sheet_name=sheet_name)
+        df.columns = [str(col).strip() for col in df.columns]
+        if all(col in df.columns for col in required_columns):
+            selected_df = df
+            break
+
+    if selected_df is None:
+        raise ValueError("Kolom PROJECT PIC tidak ditemukan di workbook.")
+
+    selected_df = selected_df[required_columns].fillna("")
+    rows = []
+    for row in selected_df.to_dict("records"):
+        project = str(row["BIG_GROUPING_CUST"]).strip()
+        pic_support = str(row["PIC SUPPORT DATA"]).strip()
+        pic_backup = str(row["PIC BACK UP"]).strip()
+        if not (project or pic_support or pic_backup):
+            continue
+        rows.append({
+            "project": project,
+            "pic_data_support": pic_support,
+            "pic_back_up": pic_backup,
+        })
+
+    return rows, source_path
+
+
 # ── Helper: build report path ─────────────────────────────────────────────────
 
 def _build_report_path(date_obj):
@@ -272,6 +331,22 @@ def report_history_status():
     except Exception as e:
         current_app.logger.error(f"Error loading process history: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@report_explorer_bp.route("/project_pic", methods=["GET"])
+def project_pic():
+    try:
+        rows, source_path = load_project_pic_rows()
+        return jsonify({
+            "rows": rows,
+            "source": source_path,
+            "total": len(rows),
+        })
+    except FileNotFoundError as exc:
+        return jsonify({"error": f"File PROJECT PIC tidak ditemukan: {exc}"}), 404
+    except Exception as exc:
+        current_app.logger.error(f"Error loading project PIC: {exc}")
+        return jsonify({"error": str(exc)}), 500
 
 
 @report_explorer_bp.route("/list_reports", methods=["GET"])

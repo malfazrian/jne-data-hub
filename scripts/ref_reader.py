@@ -1,6 +1,8 @@
 import pandas as pd
 import os
 
+from scripts.utils import auto_update_project_reference
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_CSV = os.path.join(BASE_DIR, "..", "data", "project_reference.csv")
 
@@ -11,8 +13,28 @@ def _as_str_keep_tick(val):
 def normalize_name(name):
     return str(name).strip().replace('\u200b', '').replace('\xa0', '')
 
-def load_projects(csv_path="data/project_reference.csv"):
-    df = pd.read_csv(csv_path, encoding="latin1")
+
+def _read_project_csv(csv_path):
+    for encoding in ("utf-8-sig", "latin1"):
+        try:
+            return pd.read_csv(csv_path, encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return pd.read_csv(csv_path)
+
+
+def project_reference_mtime(csv_path="data/project_reference.csv"):
+    csv_path = os.getenv("PROJECT_REF_CSV", csv_path)
+    try:
+        return os.path.getmtime(csv_path)
+    except OSError:
+        return None
+
+
+def load_projects(csv_path=None):
+    csv_path = csv_path or os.getenv("PROJECT_REF_CSV", "data/project_reference.csv")
+    auto_update_project_reference()
+    df = _read_project_csv(csv_path)
     required_cols = ["BIG_GROUPING_CUST", "CATEGORY", "CUST_ID", "CUST_NAME"]
     missing = [c for c in required_cols if c not in df.columns]
     if missing:

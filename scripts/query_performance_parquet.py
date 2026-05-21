@@ -9,6 +9,7 @@ import openpyxl
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.styles import Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
+from .utils import auto_update_project_reference
 
 
 # Path to the authoritative project reference CSV used for ID_ACCOUNT lookup
@@ -23,7 +24,11 @@ def _load_ref_id_map(csv_path=None):
     """Return {BIG_GROUPING_CUST: ['<id1>', '<id2>', ...]} from the reference CSV."""
     path = csv_path or EXTERNAL_REF_CSV
     try:
-        df = pd.read_csv(path, encoding="latin1")
+        auto_update_project_reference()
+        try:
+            df = pd.read_csv(path, encoding="utf-8-sig")
+        except UnicodeDecodeError:
+            df = pd.read_csv(path, encoding="latin1")
         if "BIG_GROUPING_CUST" not in df.columns:
             print(f"⚠️ Kolom BIG_GROUPING_CUST tidak ditemukan di '{path}'")
             return {}
@@ -411,7 +416,10 @@ class ProjectProcessorParquet:
         if not self.criteria_lists:
             return None
         for crit in self.criteria_lists:
-            if crit["group_name"].strip().lower() == proj_name.strip().lower():
+            group_name = crit.get("group_name") or crit.get("groups_name")
+            if not group_name:
+                continue
+            if group_name.strip().lower() == proj_name.strip().lower():
                 return crit
         return None
 

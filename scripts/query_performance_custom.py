@@ -108,7 +108,10 @@ class ProjectProcessor:
         if not self.criteria_lists:
             return None
         for crit in self.criteria_lists:
-            if crit["group_name"].strip().lower() == proj_name.strip().lower():
+            group_name = crit.get("group_name") or crit.get("groups_name")
+            if not group_name:
+                continue
+            if group_name.strip().lower() == proj_name.strip().lower():
                 return crit
         return None
 
