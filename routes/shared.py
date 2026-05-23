@@ -26,6 +26,10 @@ PARQUET_PROCESSED_FILE = os.getenv("PARQUET_PROCESSED_FILE", "")
 PARQUET_SOURCE_BASE    = os.getenv("PARQUET_SOURCE_BASE", "")
 REPORT_EXPLORER_BASE   = os.getenv("REPORT_EXPLORER_BASE", "")
 APEX_DEFAULT_HOSTS     = [h.strip() for h in os.getenv("APEX_DEFAULT_HOSTS", "").split(",") if h.strip()]
+DAILY_LOAD_AWB_CHECK_DIR = os.getenv(
+    "DAILY_LOAD_AWB_CHECK_DIR",
+    r"D:\RYAN\Python Scripts\Bot Load IT\data\daily_load_awb_count_checks",
+)
 
 _BULAN = {
     1: "JANUARI",  2: "FEBRUARI", 3: "MARET",    4: "APRIL",

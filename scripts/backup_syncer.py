@@ -83,38 +83,27 @@ def get_backup_file_list(date_obj: datetime.date) -> list[dict]:
 
     files = []
     try:
-        for entry in os.scandir(backup_dir):
-            if entry.is_file():
-                if entry.name.startswith("~$"):
+        for root, _, filenames in os.walk(backup_dir):
+            for filename in filenames:
+                if filename.startswith("~$"):
                     continue
-                mtime = entry.stat().st_mtime
+                path = os.path.join(root, filename)
+                rel_path = os.path.relpath(path, backup_dir)
+                rel_dir = os.path.dirname(rel_path)
+                tag_parts = [] if not rel_dir else rel_dir.split(os.sep)
+                tag = " ".join(tag_parts) if tag_parts else "UNKNOWN"
+                stat = os.stat(path)
+                mtime = stat.st_mtime
                 files.append({
-                    "name": entry.name,
-                    "size": entry.stat().st_size,
+                    "name": filename,
+                    "size": stat.st_size,
                     "modified": datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"),
                     "modified_ts": mtime,
-                    "tag": "UNKNOWN",
-                    "rel_path": entry.name,
+                    "tag": tag,
+                    "tags": tag_parts or ["UNKNOWN"],
+                    "rel_path": rel_path.replace("\\", "/"),
                     "from_backup": True,
                 })
-            elif entry.is_dir():
-                tag = entry.name
-                try:
-                    for item in os.scandir(entry.path):
-                        if not item.is_file() or item.name.startswith("~$"):
-                            continue
-                        mtime = item.stat().st_mtime
-                        files.append({
-                            "name": item.name,
-                            "size": item.stat().st_size,
-                            "modified": datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S"),
-                            "modified_ts": mtime,
-                            "tag": tag,
-                            "rel_path": f"{tag}/{item.name}",
-                            "from_backup": True,
-                        })
-                except PermissionError:
-                    pass
     except PermissionError:
         return []
 
@@ -177,25 +166,19 @@ def _sync_once(network_base: str) -> None:
         os.makedirs(backup_dir, exist_ok=True)
         copied = 0
 
-        for entry in os.scandir(network_path):
-            if entry.is_file():
-                if entry.name.startswith("~$"):
+        def on_walk_error(error):
+            logger.warning(f"[backup_syncer] Permission error in {getattr(error, 'filename', network_path)}: {error}")
+
+        for root, _, filenames in os.walk(network_path, onerror=on_walk_error):
+            for filename in filenames:
+                if filename.startswith("~$"):
                     continue
-                dst = os.path.join(backup_dir, entry.name)
-                _copy_if_newer(entry.path, dst)
+                src = os.path.join(root, filename)
+                rel_path = os.path.relpath(src, network_path)
+                dst = os.path.join(backup_dir, rel_path)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                _copy_if_newer(src, dst)
                 copied += 1
-            elif entry.is_dir():
-                sub_dst = os.path.join(backup_dir, entry.name)
-                os.makedirs(sub_dst, exist_ok=True)
-                try:
-                    for item in os.scandir(entry.path):
-                        if not item.is_file() or item.name.startswith("~$"):
-                            continue
-                        dst = os.path.join(sub_dst, item.name)
-                        _copy_if_newer(item.path, dst)
-                        copied += 1
-                except PermissionError as e:
-                    logger.warning(f"[backup_syncer] Permission error in {entry.path}: {e}")
 
         with _lock:
             _last_sync_time = datetime.datetime.now()

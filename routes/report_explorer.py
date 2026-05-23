@@ -1,7 +1,7 @@
 """
 Blueprint: Report Explorer
 Routes: /report_explorer, /parquet_source_status, /report_history_status,
-        /list_reports, /user_preferences, /toggle_favorite,
+        /daily_load_awb_count_status, /list_reports, /user_preferences, /toggle_favorite,
         /track_download, /download_reports, /backup_status
 """
 import os
@@ -21,6 +21,7 @@ from routes.shared import (
     BASE_DIR,
     PROCESS_HISTORY_SOURCE, PARQUET_PROCESSED_FILE,
     PARQUET_SOURCE_BASE, REPORT_EXPLORER_BASE,
+    DAILY_LOAD_AWB_CHECK_DIR,
     _BULAN, _prefs_lock, _load_prefs_internal, _save_prefs_internal,
     get_client_ip, is_admin_request,
     extract_file_key, cleanup_old_recent_downloads,
@@ -219,6 +220,94 @@ def load_report_history_rows():
     return result
 
 
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _parse_iso_datetime(value):
+    if not value:
+        return None
+    text = str(value).replace("Z", "+00:00")
+    try:
+        return datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _build_daily_load_status(raw):
+    success = bool(raw.get("success"))
+    is_match = bool(raw.get("is_match"))
+    difference = raw.get("difference_web_minus_output")
+
+    try:
+        diff_num = int(difference)
+    except (TypeError, ValueError):
+        diff_num = None
+
+    if success and is_match:
+        return "Pas", "success"
+    if diff_num is None:
+        return "Tidak diketahui", "secondary"
+    if diff_num > 0:
+        return "Load kurang", "danger"
+    if diff_num < 0:
+        return "Load lebih", "warning"
+    return "Tidak match", "danger"
+
+
+def load_daily_load_awb_count_rows(days=7):
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=days - 1)
+    source_dir = DAILY_LOAD_AWB_CHECK_DIR
+
+    latest_by_target_date = {}
+    if os.path.isdir(source_dir):
+        for path in Path(source_dir).glob("*.json"):
+            try:
+                with open(path, "r", encoding="utf-8") as file:
+                    raw = json.load(file)
+            except Exception as exc:
+                current_app.logger.warning(f"Error reading AWB count check {path}: {exc}")
+                continue
+
+            target_date = _parse_iso_date(raw.get("target_date"))
+            if not target_date or target_date < start_date or target_date > today:
+                continue
+
+            checked_at = _parse_iso_datetime(raw.get("checked_at"))
+            current = latest_by_target_date.get(target_date)
+            if current is None or (checked_at or datetime.datetime.min) > current["checked_at_sort"]:
+                status_label, status_class = _build_daily_load_status(raw)
+                latest_by_target_date[target_date] = {
+                    "target_date": target_date.isoformat(),
+                    "checked_at": raw.get("checked_at"),
+                    "status": raw.get("status"),
+                    "status_label": status_label,
+                    "status_class": status_class,
+                    "is_match": bool(raw.get("is_match")),
+                    "output_awb_count": raw.get("output_awb_count"),
+                    "web_awb_count": raw.get("web_awb_count"),
+                    "difference_web_minus_output": raw.get("difference_web_minus_output"),
+                    "email_subject": raw.get("email_subject"),
+                    "output_file": raw.get("output_file"),
+                    "source_file": str(path),
+                    "checked_at_sort": checked_at or datetime.datetime.min,
+                }
+
+    rows = []
+    for target_date in sorted(latest_by_target_date, reverse=True):
+        row = latest_by_target_date[target_date].copy()
+        row.pop("checked_at_sort", None)
+        rows.append(row)
+
+    return rows, source_dir, start_date.isoformat(), today.isoformat()
+
+
 def _find_project_pic_file():
     data_dir = os.path.join(BASE_DIR, "data")
     candidates = [
@@ -333,6 +422,24 @@ def report_history_status():
         return jsonify({"error": str(e)}), 500
 
 
+@report_explorer_bp.route("/daily_load_awb_count_status", methods=["GET"])
+def daily_load_awb_count_status():
+    if not is_admin_request():
+        return jsonify({"error": "Forbidden"}), 403
+    try:
+        rows, source, start_date, end_date = load_daily_load_awb_count_rows(days=7)
+        return jsonify({
+            "rows": rows,
+            "source": source,
+            "start_date": start_date,
+            "end_date": end_date,
+            "total": len(rows),
+        })
+    except Exception as exc:
+        current_app.logger.error(f"Error loading daily load AWB count status: {exc}")
+        return jsonify({"error": str(exc)}), 500
+
+
 @report_explorer_bp.route("/project_pic", methods=["GET"])
 def project_pic():
     try:
@@ -365,7 +472,9 @@ def list_reports():
         from_backup = False
 
         if network_ok:
-            def add_file_entry(file_path, tag, rel_path):
+            def add_file_entry(file_path, tag_parts, rel_path):
+                tag_parts = [part for part in tag_parts if part]
+                tag = " ".join(tag_parts) if tag_parts else "UNKNOWN"
                 modified_time = os.path.getmtime(file_path)
                 modified_dt   = datetime.datetime.fromtimestamp(modified_time)
                 files.append({
@@ -374,23 +483,24 @@ def list_reports():
                     "modified":    modified_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "modified_ts": modified_time,
                     "tag":         tag,
+                    "tags":        tag_parts or ["UNKNOWN"],
                     "rel_path":    rel_path.replace("\\", "/"),
                     "from_backup": False,
                 })
-                tags.add(tag)
+                tags.add(tag_parts[0] if tag_parts else "UNKNOWN")
 
-            for entry in os.scandir(report_path):
-                if entry.is_file():
-                    if entry.name.startswith("~$"):
+            def on_walk_error(error):
+                current_app.logger.warning(f"Permission error listing reports: {error}")
+
+            for root, _, filenames in os.walk(report_path, onerror=on_walk_error):
+                for filename in filenames:
+                    if filename.startswith("~$"):
                         continue
-                    add_file_entry(entry.path, "UNKNOWN", entry.name)
-                elif entry.is_dir():
-                    tag = entry.name
-                    for item in os.scandir(entry.path):
-                        if not item.is_file() or item.name.startswith("~$"):
-                            continue
-                        rel_path = os.path.join(tag, item.name)
-                        add_file_entry(item.path, tag, rel_path)
+                    file_path = os.path.join(root, filename)
+                    rel_path = os.path.relpath(file_path, report_path)
+                    rel_dir = os.path.dirname(rel_path)
+                    tag_parts = [] if not rel_dir else rel_dir.split(os.sep)
+                    add_file_entry(file_path, tag_parts, rel_path)
 
             files.sort(key=lambda x: x["modified_ts"], reverse=True)
 
@@ -398,7 +508,7 @@ def list_reports():
             backup_files = backup_syncer.get_backup_file_list(date_obj.date())
             if backup_files:
                 files       = backup_files
-                tags        = {f["tag"] for f in files}
+                tags        = {f.get("tags", [f.get("tag", "UNKNOWN")])[0] for f in files}
                 from_backup = True
                 current_app.logger.info(
                     f"[report_explorer] Network returned 0 files for {date_str}; "

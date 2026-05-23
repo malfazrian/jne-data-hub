@@ -212,6 +212,11 @@
       overflow: auto;
     }
 
+    .daily-load-awb-table-wrap {
+      max-height: 42vh;
+      overflow: auto;
+    }
+
     .project-pic-table-wrap {
       max-height: 60vh;
       overflow: auto;
@@ -567,6 +572,34 @@
           </div>
           <hr id="parquetDivider" class="mb-3" style="display: none;">
 
+          <div id="dailyLoadAwbSection" class="mb-4" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-2 gap-3">
+              <div>
+                <div class="fw-semibold">Load AWB Count Check</div>
+              </div>
+              <span class="badge text-bg-light border" id="dailyLoadAwbCount">0 data</span>
+            </div>
+            <div id="dailyLoadAwbError" class="alert alert-warning py-2 mb-2" style="display: none;"></div>
+            <div id="dailyLoadAwbEmpty" class="text-muted small py-2" style="display: none;">
+              Belum ada data pengecekan untuk 7 hari terakhir.
+            </div>
+            <div id="dailyLoadAwbTableWrap" class="daily-load-awb-table-wrap" style="display: none;">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light sticky-top">
+                  <tr>
+                    <th>Tanggal Load</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-end">Output</th>
+                    <th class="text-end">Web</th>
+                    <th class="text-end">Selisih</th>
+                  </tr>
+                </thead>
+                <tbody id="dailyLoadAwbTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <hr id="dailyLoadAwbDivider" class="mb-3" style="display: none;">
+
           <div id="historyStatusCounters" class="row g-2 mb-3" style="display: none;">
             <div class="col-md-4">
               <div class="card border-0 shadow-sm h-100">
@@ -797,6 +830,13 @@
       const parquetTotalDoneEl = document.getElementById('parquetTotalDone');
       const parquetTotalPendingEl = document.getElementById('parquetTotalPending');
       const parquetMonthRowsEl = document.getElementById('parquetMonthRows');
+      const dailyLoadAwbSectionEl = document.getElementById('dailyLoadAwbSection');
+      const dailyLoadAwbDividerEl = document.getElementById('dailyLoadAwbDivider');
+      const dailyLoadAwbCountEl = document.getElementById('dailyLoadAwbCount');
+      const dailyLoadAwbErrorEl = document.getElementById('dailyLoadAwbError');
+      const dailyLoadAwbEmptyEl = document.getElementById('dailyLoadAwbEmpty');
+      const dailyLoadAwbTableWrapEl = document.getElementById('dailyLoadAwbTableWrap');
+      const dailyLoadAwbTableBodyEl = document.getElementById('dailyLoadAwbTableBody');
       const countersEl = document.getElementById('historyStatusCounters');
       const countReportsEl = document.getElementById('historyCountReports');
       const countQueryEl = document.getElementById('historyCountQuery');
@@ -811,6 +851,13 @@
       errorEl.style.display = 'none';
       parquetSectionEl.style.display = 'none';
       parquetDividerEl.style.display = 'none';
+      dailyLoadAwbSectionEl.style.display = 'none';
+      dailyLoadAwbDividerEl.style.display = 'none';
+      dailyLoadAwbErrorEl.style.display = 'none';
+      dailyLoadAwbEmptyEl.style.display = 'none';
+      dailyLoadAwbTableWrapEl.style.display = 'none';
+      dailyLoadAwbCountEl.textContent = '0 data';
+      dailyLoadAwbTableBodyEl.innerHTML = '';
       countersEl.style.display = 'none';
       countReportsEl.textContent = '0';
       countQueryEl.textContent = '0';
@@ -823,9 +870,10 @@
       modal.show();
 
       try {
-        const [histRes, parquetRes] = await Promise.allSettled([
+        const [histRes, parquetRes, awbRes] = await Promise.allSettled([
           fetch('/report_history_status'),
-          fetch('/parquet_source_status')
+          fetch('/parquet_source_status'),
+          fetch('/daily_load_awb_count_status')
         ]);
 
         // --- Parquet source section ---
@@ -849,6 +897,26 @@
           });
           parquetSectionEl.style.display = 'block';
           parquetDividerEl.style.display = 'block';
+        }
+
+        // --- Daily load AWB count check section ---
+        if (awbRes.status === 'fulfilled') {
+          const awbResponse = awbRes.value;
+          const awbData = await awbResponse.json();
+          dailyLoadAwbSectionEl.style.display = 'block';
+          dailyLoadAwbDividerEl.style.display = 'block';
+
+          if (!awbResponse.ok) {
+            dailyLoadAwbErrorEl.textContent = awbData.error || 'Gagal memuat pengecekan load AWB.';
+            dailyLoadAwbErrorEl.style.display = 'block';
+          } else {
+            renderDailyLoadAwbRows(awbData);
+          }
+        } else {
+          dailyLoadAwbSectionEl.style.display = 'block';
+          dailyLoadAwbDividerEl.style.display = 'block';
+          dailyLoadAwbErrorEl.textContent = 'Gagal memuat pengecekan load AWB.';
+          dailyLoadAwbErrorEl.style.display = 'block';
         }
 
         // --- History status section ---
@@ -896,6 +964,56 @@
         errorEl.textContent = error.message || 'Gagal memuat process history.';
         errorEl.style.display = 'block';
       }
+    }
+
+    function formatNumber(value) {
+      if (value === null || value === undefined || value === '') return '-';
+      const number = Number(value);
+      if (!Number.isFinite(number)) return escapeHtml(value);
+      return new Intl.NumberFormat('id-ID').format(number);
+    }
+
+    function formatSignedNumber(value) {
+      if (value === null || value === undefined || value === '') return '-';
+      const number = Number(value);
+      if (!Number.isFinite(number)) return escapeHtml(value);
+      const formatted = new Intl.NumberFormat('id-ID').format(Math.abs(number));
+      return number > 0 ? `+${formatted}` : number < 0 ? `-${formatted}` : '0';
+    }
+
+    function renderDailyLoadAwbRows(data) {
+      const countEl = document.getElementById('dailyLoadAwbCount');
+      const emptyEl = document.getElementById('dailyLoadAwbEmpty');
+      const tableWrapEl = document.getElementById('dailyLoadAwbTableWrap');
+      const tbodyEl = document.getElementById('dailyLoadAwbTableBody');
+      const rows = data.rows || [];
+
+      countEl.textContent = `${rows.length} data`;
+      tbodyEl.innerHTML = '';
+
+      rows.forEach(row => {
+        const statusClass = ['success', 'danger', 'warning', 'secondary'].includes(row.status_class)
+          ? row.status_class
+          : 'secondary';
+        const difference = Number(row.difference_web_minus_output);
+        const differenceClass = Number.isFinite(difference) && difference !== 0
+          ? (difference > 0 ? 'text-danger' : 'text-warning')
+          : 'text-success';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="fw-semibold">${escapeHtml(row.target_date || '-')}</td>
+          <td class="text-center">
+            <span class="badge text-bg-${statusClass}">${escapeHtml(row.status_label || row.status || '-')}</span>
+          </td>
+          <td class="text-end" title="${escapeHtml(row.output_file || '')}">${formatNumber(row.output_awb_count)}</td>
+          <td class="text-end">${formatNumber(row.web_awb_count)}</td>
+          <td class="text-end ${differenceClass} fw-semibold">${formatSignedNumber(row.difference_web_minus_output)}</td>
+        `;
+        tbodyEl.appendChild(tr);
+      });
+
+      tableWrapEl.style.display = rows.length ? 'block' : 'none';
+      emptyEl.style.display = rows.length ? 'none' : 'block';
     }
 
     function rerenderHistoryTable() {
@@ -1078,7 +1196,10 @@
 
       // Apply tag filter
       if (selectedTags.length > 0) {
-        filtered = filtered.filter(f => selectedTags.includes(f.tag));
+        filtered = filtered.filter(f => {
+          const fileTags = getFileTags(f);
+          return selectedTags.some(tag => fileTags.includes(tag));
+        });
       }
       
       // Sort: favorites first
@@ -1114,6 +1235,13 @@
       }
     }
 
+    function getFileTags(file) {
+      if (Array.isArray(file.tags) && file.tags.length > 0) {
+        return file.tags.filter(Boolean);
+      }
+      return file.tag ? [file.tag] : [];
+    }
+
     function renderTagSelect(tags) {
       const selectEl = document.getElementById('tagSelect');
       if (!tagSelect) {
@@ -1131,13 +1259,14 @@
       }
 
       const prevSelected = selectedTags.slice();
+      const normalizedTags = Array.from(new Set(tags || [])).filter(Boolean).sort((a, b) => a.localeCompare(b));
       tagSelect.clearOptions();
-      (tags || []).forEach(tag => {
+      normalizedTags.forEach(tag => {
         tagSelect.addOption({ value: tag, text: tag });
       });
       tagSelect.refreshOptions(false);
 
-      const stillValid = prevSelected.filter(tag => (tags || []).includes(tag));
+      const stillValid = prevSelected.filter(tag => normalizedTags.includes(tag));
       tagSelect.setValue(stillValid, true);
       selectedTags = stillValid;
     }
@@ -1307,7 +1436,9 @@
       const fileKey = extractFileKey(file.name);
       const isFavorite = userPreferences.favorites.includes(fileKey);
       const isRecent = userPreferences.recent_downloads.some(r => r.key === fileKey);
-      const tagBadge = file.tag ? `<span>${file.tag}</span>` : '';
+      const tagBadge = getFileTags(file)
+        .map(tag => `<span class="badge bg-light-subtle text-muted border border-light-subtle fw-normal me-1">${escapeHtml(tag)}</span>`)
+        .join('');
       if (isRecent) card.classList.add('file-card-recent');
       
       card.innerHTML = `
