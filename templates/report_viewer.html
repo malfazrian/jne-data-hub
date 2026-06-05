@@ -202,19 +202,207 @@
     }
 
     .history-status-cell {
-      font-size: 1.15rem;
+      font-size: 1rem;
       text-align: center;
       vertical-align: middle;
     }
 
+    .status-modal-dialog {
+      --bs-modal-width: min(1120px, calc(100vw - 2rem));
+    }
+
+    .status-modal-content {
+      border: 0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, .22);
+    }
+
+    .status-modal-header {
+      background: #ffffff;
+      border-bottom: 1px solid #e7ebf1;
+      padding: 1rem 1.25rem;
+    }
+
+    .status-modal-title {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .status-title-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      color: #0d6efd;
+      background: #eef5ff;
+    }
+
+    .status-modal-body {
+      background: #f6f8fb;
+      padding: 1rem;
+    }
+
+    .status-section {
+      background: #ffffff;
+      border: 1px solid #e6eaf0;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+      margin-bottom: 1rem;
+      padding: 1rem;
+    }
+
+    .status-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: .85rem;
+    }
+
+    .status-section-title {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .status-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .75rem;
+      margin-bottom: .9rem;
+    }
+
+    .status-kpi {
+      border: 1px solid #e8edf3 !important;
+      border-radius: 10px;
+      box-shadow: none !important;
+      background: #ffffff;
+    }
+
+    .status-kpi .card-body {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      min-height: 70px;
+      padding: .8rem .9rem;
+    }
+
+    .status-kpi-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #f1f5f9;
+      color: #64748b;
+      font-size: 1rem;
+    }
+
+    .status-kpi-success .status-kpi-icon {
+      background: #eaf7f1;
+      color: #198754;
+    }
+
+    .status-kpi-warning .status-kpi-icon {
+      background: #fff8e6;
+      color: #d89b00;
+    }
+
+    .status-kpi small {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .status-kpi-value {
+      font-size: 1.2rem;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .status-table-wrap {
+      border: 1px solid #e6eaf0;
+      border-radius: 10px;
+      overflow: auto;
+      background: #ffffff;
+    }
+
     .history-table-wrap {
-      max-height: 65vh;
+      max-height: none;
+      overflow: visible;
+    }
+
+    .history-table-scroll {
+      max-height: 50vh;
       overflow: auto;
     }
 
     .daily-load-awb-table-wrap {
       max-height: 42vh;
-      overflow: auto;
+    }
+
+    .status-table {
+      margin-bottom: 0;
+    }
+
+    .status-table thead th {
+      background: #f8fafc;
+      border-bottom: 1px solid #d9e0ea;
+      color: #111827;
+      font-size: .78rem;
+      letter-spacing: .01em;
+      padding: .65rem .75rem;
+      position: sticky;
+      top: 0;
+      white-space: nowrap;
+      z-index: 1;
+    }
+
+    .status-table tbody td {
+      border-color: #edf1f5;
+      padding: .65rem .75rem;
+      vertical-align: middle;
+    }
+
+    .status-sort {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    .status-count-badge {
+      border-radius: 999px;
+      font-weight: 700;
+      padding: .4rem .65rem;
+    }
+
+    @media (max-width: 768px) {
+      .status-kpi-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .status-section-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .status-sort {
+        width: 100%;
+      }
+
+      .status-sort select {
+        flex: 1;
+      }
     }
 
     .project-pic-table-wrap {
@@ -233,7 +421,7 @@
     }
   </style>
 </head>
-<body data-is-admin="{{ 'true' if is_admin else 'false' }}">
+<body>
   <!-- === NAVBAR === -->
   <nav class="navbar navbar-expand-lg fixed-top">
     <div class="container-fluid">
@@ -307,11 +495,9 @@
         <button class="btn btn-sm btn-primary" id="projectPicBtn" type="button">
           <i class="bi bi-people-fill me-1"></i> Project PIC
         </button>
-        {% if is_admin %}
         <button class="history-info-btn" id="historyInfoBtn" type="button" title="Lihat status query dan edit report">
           ℹ️
         </button>
-        {% endif %}
         </div>
       </div>
 
@@ -510,17 +696,17 @@
     </div>
   </div>
 
-  {% if is_admin %}
   <div class="modal fade" id="historyStatusModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">
-            <i class="bi bi-table me-2"></i> Status Query dan Edit Report
+    <div class="modal-dialog modal-xl modal-dialog-scrollable status-modal-dialog">
+      <div class="modal-content status-modal-content">
+        <div class="modal-header status-modal-header">
+          <h5 class="modal-title status-modal-title">
+            <span class="status-title-icon"><i class="bi bi-table"></i></span>
+            Status Query dan Edit Report
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body status-modal-body">
           <div id="historyStatusLoading" class="text-center py-4" style="display: none;">
             <div class="spinner-border text-primary" role="status">
               <span class="visually-hidden">Loading...</span>
@@ -530,35 +716,45 @@
           <div id="historyStatusError" class="alert alert-danger" style="display: none;"></div>
 
           <!-- Parquet source status -->
-          <div id="parquetSourceSection" class="mb-4" style="display: none;">
-            <div class="row g-2 mb-2">
-              <div class="col-4">
-                <div class="card border-0 shadow-sm h-100">
-                  <div class="card-body py-2">
-                    <small class="text-muted d-block">Total Excel</small>
-                    <div class="fw-bold fs-5" id="parquetTotalExcel">0</div>
+          <div id="parquetSourceSection" class="status-section" style="display: none;">
+            <div class="status-section-header">
+              <div class="status-section-title">
+                <i class="bi bi-database-check text-primary"></i>
+                Parquet Source
+              </div>
+            </div>
+            <div class="status-kpi-grid">
+              <div>
+                <div class="card status-kpi h-100">
+                  <div class="card-body">
+                    <span class="status-kpi-icon"><i class="bi bi-file-earmark-spreadsheet"></i></span>
+                    <div>
+                      <small class="text-muted d-block">Total Excel</small>
+                      <div class="status-kpi-value" id="parquetTotalExcel">0</div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div class="col-4">
-                <div class="card border-0 shadow-sm h-100">
-                  <div class="card-body py-2">
+              <div>
+                <div class="card status-kpi status-kpi-success h-100">
+                  <div class="card-body">
                     <small class="text-muted d-block">Processed ✅</small>
-                    <div class="fw-bold fs-5 text-success" id="parquetTotalDone">0</div>
+                    <div class="status-kpi-value text-success" id="parquetTotalDone">0</div>
                   </div>
                 </div>
               </div>
-              <div class="col-4">
-                <div class="card border-0 shadow-sm h-100">
-                  <div class="card-body py-2">
+              <div>
+                <div class="card status-kpi status-kpi-warning h-100">
+                  <div class="card-body">
                     <small class="text-muted d-block">Failed / Pending ⚠️</small>
-                    <div class="fw-bold fs-5 text-warning" id="parquetTotalPending">0</div>
+                    <div class="status-kpi-value text-warning" id="parquetTotalPending">0</div>
                   </div>
                 </div>
               </div>
             </div>
-            <table class="table table-sm table-borderless align-middle mb-0">
-              <thead class="table-light">
+            <div class="status-table-wrap">
+            <table class="table table-sm table-hover align-middle status-table">
+              <thead>
                 <tr>
                   <th>Bulan</th>
                   <th class="text-center">Total</th>
@@ -569,23 +765,25 @@
               </thead>
               <tbody id="parquetMonthRows"></tbody>
             </table>
+            </div>
           </div>
-          <hr id="parquetDivider" class="mb-3" style="display: none;">
+          <hr id="parquetDivider" class="d-none" style="display: none;">
 
-          <div id="dailyLoadAwbSection" class="mb-4" style="display: none;">
-            <div class="d-flex justify-content-between align-items-center mb-2 gap-3">
-              <div>
-                <div class="fw-semibold">Load AWB Count Check</div>
+          <div id="dailyLoadAwbSection" class="status-section" style="display: none;">
+            <div class="status-section-header">
+              <div class="status-section-title">
+                <i class="bi bi-activity text-primary"></i>
+                Load AWB Count Check
               </div>
-              <span class="badge text-bg-light border" id="dailyLoadAwbCount">0 data</span>
+              <span class="badge text-bg-light border status-count-badge" id="dailyLoadAwbCount">0 data</span>
             </div>
             <div id="dailyLoadAwbError" class="alert alert-warning py-2 mb-2" style="display: none;"></div>
             <div id="dailyLoadAwbEmpty" class="text-muted small py-2" style="display: none;">
               Belum ada data pengecekan untuk 7 hari terakhir.
             </div>
-            <div id="dailyLoadAwbTableWrap" class="daily-load-awb-table-wrap" style="display: none;">
-              <table class="table table-sm table-hover align-middle mb-0">
-                <thead class="table-light sticky-top">
+            <div id="dailyLoadAwbTableWrap" class="daily-load-awb-table-wrap status-table-wrap" style="display: none;">
+              <table class="table table-sm table-hover align-middle status-table">
+                <thead>
                   <tr>
                     <th>Tanggal Load</th>
                     <th class="text-center">Status</th>
@@ -598,41 +796,53 @@
               </table>
             </div>
           </div>
-          <hr id="dailyLoadAwbDivider" class="mb-3" style="display: none;">
+          <hr id="dailyLoadAwbDivider" class="d-none" style="display: none;">
 
-          <div id="historyStatusCounters" class="row g-2 mb-3" style="display: none;">
-            <div class="col-md-4">
-              <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-2">
-                  <small class="text-muted d-block">Report Total</small>
-                  <div class="fw-bold fs-5" id="historyCountReports">0</div>
+          <div id="historyStatusCounters" class="status-kpi-grid" style="display: none;">
+            <div>
+              <div class="card status-kpi h-100">
+                <div class="card-body">
+                  <span class="status-kpi-icon"><i class="bi bi-files"></i></span>
+                  <div>
+                    <small class="text-muted d-block">Report Total</small>
+                    <div class="status-kpi-value" id="historyCountReports">0</div>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="col-md-4">
-              <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-2">
-                  <small class="text-muted d-block">Query Succeed</small>
-                  <div class="fw-bold fs-5 text-success" id="historyCountQuery">0</div>
+            <div>
+              <div class="card status-kpi status-kpi-success h-100">
+                <div class="card-body">
+                  <span class="status-kpi-icon"><i class="bi bi-check2-circle"></i></span>
+                  <div>
+                    <small class="text-muted d-block">Query Succeed</small>
+                    <div class="status-kpi-value text-success" id="historyCountQuery">0</div>
+                  </div>
                 </div>
               </div>
             </div>
-            <div class="col-md-4">
-              <div class="card border-0 shadow-sm h-100">
-                <div class="card-body py-2">
-                  <small class="text-muted d-block">Edit Succeed</small>
-                  <div class="fw-bold fs-5 text-success" id="historyCountEdit">0</div>
+            <div>
+              <div class="card status-kpi status-kpi-success h-100">
+                <div class="card-body">
+                  <span class="status-kpi-icon"><i class="bi bi-pencil-square"></i></span>
+                  <div>
+                    <small class="text-muted d-block">Edit Succeed</small>
+                    <div class="status-kpi-value text-success" id="historyCountEdit">0</div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
           <div id="historyStatusMeta" class="small text-muted mb-3" style="display: none;"></div>
-          <div id="historyStatusTableWrap" class="history-table-wrap" style="display: none;">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-              <span class="fw-semibold"></span>
-              <div>
-                <label class="form-label mb-0 me-2 d-inline">Sort:</label>
-                <select id="historySortSelect" class="form-select form-select-sm d-inline-block" style="width: auto;">
+          <div id="historyStatusTableWrap" class="history-table-wrap status-section" style="display: none;">
+            <div class="status-section-header">
+              <div class="status-section-title">
+                <i class="bi bi-list-check text-primary"></i>
+                Process History
+              </div>
+              <div class="status-sort">
+                <label class="form-label mb-0 small text-muted" for="historySortSelect">Sort</label>
+                <select id="historySortSelect" class="form-select form-select-sm">
                   <option value="name-asc">Nama (A-Z)</option>
                   <option value="name-desc">Nama (Z-A)</option>
                   <option value="query-fail">Query - Gagal Dulu</option>
@@ -642,16 +852,18 @@
                 </select>
               </div>
             </div>
-            <table class="table table-sm table-hover align-middle mb-0">
-              <thead class="table-light sticky-top">
-                <tr>
-                  <th>Report Name</th>
-                  <th class="text-center">Query</th>
-                  <th class="text-center">Edit</th>
-                </tr>
-              </thead>
-              <tbody id="historyStatusTableBody"></tbody>
-            </table>
+            <div class="history-table-scroll status-table-wrap">
+              <table class="table table-sm table-hover align-middle status-table">
+                <thead>
+                  <tr>
+                    <th>Report Name</th>
+                    <th class="text-center">Query</th>
+                    <th class="text-center">Edit</th>
+                  </tr>
+                </thead>
+                <tbody id="historyStatusTableBody"></tbody>
+              </table>
+            </div>
           </div>
           <div id="historyStatusEmpty" class="text-center py-5" style="display: none;">
             <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
@@ -661,7 +873,6 @@
       </div>
     </div>
   </div>
-  {% endif %}
 
   <!-- === FOOTER === -->
   <footer>
@@ -692,13 +903,15 @@
     let selectedTags = [];
     let availableTags = [];
     let tagSelect = null;
-    const isAdmin = document.body.dataset.isAdmin === 'true';
     let historyStatusRows = [];
     let projectPicRows = [];
     let projectPicLoaded = false;
 
     // Load user preferences and files when page loads
     document.addEventListener('DOMContentLoaded', async function() {
+      normalizeStatusKpi('parquetTotalDone', 'Processed', 'bi-check2-circle');
+      normalizeStatusKpi('parquetTotalPending', 'Failed / Pending', 'bi-exclamation-triangle');
+
       await loadUserPreferences();
       await loadFiles();
 
@@ -725,13 +938,26 @@
         });
       }
 
-      if (isAdmin) {
-        const historyInfoBtn = document.getElementById('historyInfoBtn');
-        if (historyInfoBtn) {
-          historyInfoBtn.addEventListener('click', openHistoryStatusModal);
-        }
+      const historyInfoBtn = document.getElementById('historyInfoBtn');
+      if (historyInfoBtn) {
+        historyInfoBtn.addEventListener('click', openHistoryStatusModal);
       }
     });
+
+    function normalizeStatusKpi(valueId, label, iconClass) {
+      const valueEl = document.getElementById(valueId);
+      const labelEl = valueEl?.previousElementSibling;
+      const bodyEl = valueEl?.closest('.card-body');
+      if (labelEl) labelEl.textContent = label;
+      if (bodyEl && !bodyEl.querySelector('.status-kpi-icon')) {
+        const iconEl = document.createElement('span');
+        iconEl.className = 'status-kpi-icon';
+        iconEl.innerHTML = `<i class="bi ${iconClass}"></i>`;
+        const textWrap = document.createElement('div');
+        textWrap.append(labelEl, valueEl);
+        bodyEl.append(iconEl, textWrap);
+      }
+    }
 
     function escapeHtml(value) {
       return String(value ?? '')
@@ -944,7 +1170,7 @@
         countReportsEl.textContent = String(totalReports);
         countQueryEl.textContent = String(querySuccess);
         countEditEl.textContent = String(editSuccess);
-        countersEl.style.display = 'flex';
+        countersEl.style.display = 'grid';
 
         // Store rows for sorting
         historyStatusRows = data.rows;

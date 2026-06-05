@@ -8,6 +8,8 @@ import os
 import json
 import datetime
 import io
+import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -23,11 +25,41 @@ from routes.shared import (
     PARQUET_SOURCE_BASE, REPORT_EXPLORER_BASE,
     DAILY_LOAD_AWB_CHECK_DIR,
     _BULAN, _prefs_lock, _load_prefs_internal, _save_prefs_internal,
-    get_client_ip, is_admin_request,
+    get_client_ip,
     extract_file_key, cleanup_old_recent_downloads,
 )
 
 report_explorer_bp = Blueprint("report_explorer", __name__)
+
+REPORT_EXPLORER_CACHE_TTL_SECONDS = int(os.getenv("REPORT_EXPLORER_CACHE_TTL_SECONDS", "60"))
+STATUS_CACHE_TTL_SECONDS = int(os.getenv("REPORT_EXPLORER_STATUS_CACHE_TTL_SECONDS", "300"))
+
+_cache_lock = threading.Lock()
+_cache_store = {}
+
+
+def _cache_get(key, ttl_seconds):
+    cached = _cache_store.get(key)
+    if not cached:
+        return None
+    cached_at, data = cached
+    if time.time() - cached_at > ttl_seconds:
+        _cache_store.pop(key, None)
+        return None
+    return data
+
+
+def _cached_data(key, ttl_seconds, loader):
+    with _cache_lock:
+        cached = _cache_get(key, ttl_seconds)
+        if cached is not None:
+            return cached
+
+    data = loader()
+
+    with _cache_lock:
+        _cache_store[key] = (time.time(), data)
+    return data
 
 
 # ── History / status helpers ──────────────────────────────────────────────────
@@ -389,15 +421,17 @@ def report_explorer():
     user_ip = get_client_ip()
     cleanup_old_recent_downloads(user_ip)
     today = datetime.datetime.now().strftime("%Y-%m-%d")
-    return render_template("report_viewer.html", today=today, is_admin=is_admin_request())
+    return render_template("report_viewer.html", today=today)
 
 
 @report_explorer_bp.route("/parquet_source_status", methods=["GET"])
 def parquet_source_status():
-    if not is_admin_request():
-        return jsonify({"error": "Forbidden"}), 403
     try:
-        data = load_parquet_source_status()
+        data = _cached_data(
+            "parquet_source_status",
+            STATUS_CACHE_TTL_SECONDS,
+            load_parquet_source_status,
+        )
         return jsonify(data)
     except Exception as exc:
         current_app.logger.error(f"Error loading parquet source status: {exc}")
@@ -406,15 +440,17 @@ def parquet_source_status():
 
 @report_explorer_bp.route("/report_history_status", methods=["GET"])
 def report_history_status():
-    if not is_admin_request():
-        return jsonify({"error": "Forbidden"}), 403
     try:
-        rows = load_report_history_rows()
-        return jsonify({
-            "rows":   rows,
-            "source": PROCESS_HISTORY_SOURCE,
-            "today":  datetime.date.today().isoformat(),
-        })
+        data = _cached_data(
+            "report_history_status",
+            STATUS_CACHE_TTL_SECONDS,
+            lambda: {
+                "rows":   load_report_history_rows(),
+                "source": PROCESS_HISTORY_SOURCE,
+                "today":  datetime.date.today().isoformat(),
+            },
+        )
+        return jsonify(data)
     except FileNotFoundError:
         return jsonify({"error": "Process history file not found"}), 404
     except Exception as e:
@@ -424,17 +460,23 @@ def report_history_status():
 
 @report_explorer_bp.route("/daily_load_awb_count_status", methods=["GET"])
 def daily_load_awb_count_status():
-    if not is_admin_request():
-        return jsonify({"error": "Forbidden"}), 403
     try:
-        rows, source, start_date, end_date = load_daily_load_awb_count_rows(days=7)
-        return jsonify({
-            "rows": rows,
-            "source": source,
-            "start_date": start_date,
-            "end_date": end_date,
-            "total": len(rows),
-        })
+        def load_data():
+            rows, source, start_date, end_date = load_daily_load_awb_count_rows(days=7)
+            return {
+                "rows": rows,
+                "source": source,
+                "start_date": start_date,
+                "end_date": end_date,
+                "total": len(rows),
+            }
+
+        data = _cached_data(
+            "daily_load_awb_count_status",
+            STATUS_CACHE_TTL_SECONDS,
+            load_data,
+        )
+        return jsonify(data)
     except Exception as exc:
         current_app.logger.error(f"Error loading daily load AWB count status: {exc}")
         return jsonify({"error": str(exc)}), 500
@@ -443,12 +485,16 @@ def daily_load_awb_count_status():
 @report_explorer_bp.route("/project_pic", methods=["GET"])
 def project_pic():
     try:
-        rows, source_path = load_project_pic_rows()
-        return jsonify({
-            "rows": rows,
-            "source": source_path,
-            "total": len(rows),
-        })
+        def load_data():
+            rows, source_path = load_project_pic_rows()
+            return {
+                "rows": rows,
+                "source": source_path,
+                "total": len(rows),
+            }
+
+        data = _cached_data("project_pic", STATUS_CACHE_TTL_SECONDS, load_data)
+        return jsonify(data)
     except FileNotFoundError as exc:
         return jsonify({"error": f"File PROJECT PIC tidak ditemukan: {exc}"}), 404
     except Exception as exc:
@@ -463,72 +509,81 @@ def list_reports():
         return jsonify({"error": "Date parameter required"}), 400
 
     try:
-        date_obj    = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-        report_path = _build_report_path(date_obj)
-
-        network_ok  = os.path.exists(report_path)
-        files       = []
-        tags        = set()
-        from_backup = False
-
-        if network_ok:
-            def add_file_entry(file_path, tag_parts, rel_path):
-                tag_parts = [part for part in tag_parts if part]
-                tag = " ".join(tag_parts) if tag_parts else "UNKNOWN"
-                modified_time = os.path.getmtime(file_path)
-                modified_dt   = datetime.datetime.fromtimestamp(modified_time)
-                files.append({
-                    "name":        os.path.basename(file_path),
-                    "size":        os.path.getsize(file_path),
-                    "modified":    modified_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    "modified_ts": modified_time,
-                    "tag":         tag,
-                    "tags":        tag_parts or ["UNKNOWN"],
-                    "rel_path":    rel_path.replace("\\", "/"),
-                    "from_backup": False,
-                })
-                tags.add(tag_parts[0] if tag_parts else "UNKNOWN")
-
-            def on_walk_error(error):
-                current_app.logger.warning(f"Permission error listing reports: {error}")
-
-            for root, _, filenames in os.walk(report_path, onerror=on_walk_error):
-                for filename in filenames:
-                    if filename.startswith("~$"):
-                        continue
-                    file_path = os.path.join(root, filename)
-                    rel_path = os.path.relpath(file_path, report_path)
-                    rel_dir = os.path.dirname(rel_path)
-                    tag_parts = [] if not rel_dir else rel_dir.split(os.sep)
-                    add_file_entry(file_path, tag_parts, rel_path)
-
-            files.sort(key=lambda x: x["modified_ts"], reverse=True)
-
-        if not files:
-            backup_files = backup_syncer.get_backup_file_list(date_obj.date())
-            if backup_files:
-                files       = backup_files
-                tags        = {f.get("tags", [f.get("tag", "UNKNOWN")])[0] for f in files}
-                from_backup = True
-                current_app.logger.info(
-                    f"[report_explorer] Network returned 0 files for {date_str}; "
-                    f"serving {len(files)} file(s) from local backup."
-                )
-
-        if not network_ok and not files:
-            return jsonify({"files": [], "path": report_path, "exists": False, "from_backup": False})
-
-        return jsonify({
-            "files":       files,
-            "tags":        sorted(tags),
-            "path":        report_path,
-            "exists":      network_ok,
-            "from_backup": from_backup,
-        })
+        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        data = _cached_data(
+            ("list_reports", date_obj.date().isoformat()),
+            REPORT_EXPLORER_CACHE_TTL_SECONDS,
+            lambda: _load_list_reports_data(date_obj, date_str),
+        )
+        return jsonify(data)
 
     except Exception as e:
         current_app.logger.error(f"Error listing reports: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+def _load_list_reports_data(date_obj, date_str):
+    report_path = _build_report_path(date_obj)
+
+    network_ok  = os.path.exists(report_path)
+    files       = []
+    tags        = set()
+    from_backup = False
+
+    if network_ok:
+        def add_file_entry(file_path, tag_parts, rel_path):
+            tag_parts = [part for part in tag_parts if part]
+            tag = " ".join(tag_parts) if tag_parts else "UNKNOWN"
+            modified_time = os.path.getmtime(file_path)
+            modified_dt   = datetime.datetime.fromtimestamp(modified_time)
+            files.append({
+                "name":        os.path.basename(file_path),
+                "size":        os.path.getsize(file_path),
+                "modified":    modified_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "modified_ts": modified_time,
+                "tag":         tag,
+                "tags":        tag_parts or ["UNKNOWN"],
+                "rel_path":    rel_path.replace("\\", "/"),
+                "from_backup": False,
+            })
+            tags.add(tag_parts[0] if tag_parts else "UNKNOWN")
+
+        def on_walk_error(error):
+            current_app.logger.warning(f"Permission error listing reports: {error}")
+
+        for root, _, filenames in os.walk(report_path, onerror=on_walk_error):
+            for filename in filenames:
+                if filename.startswith("~$"):
+                    continue
+                file_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(file_path, report_path)
+                rel_dir = os.path.dirname(rel_path)
+                tag_parts = [] if not rel_dir else rel_dir.split(os.sep)
+                add_file_entry(file_path, tag_parts, rel_path)
+
+        files.sort(key=lambda x: x["modified_ts"], reverse=True)
+
+    if not files:
+        backup_files = backup_syncer.get_backup_file_list(date_obj.date())
+        if backup_files:
+            files       = backup_files
+            tags        = {f.get("tags", [f.get("tag", "UNKNOWN")])[0] for f in files}
+            from_backup = True
+            current_app.logger.info(
+                f"[report_explorer] Network returned 0 files for {date_str}; "
+                f"serving {len(files)} file(s) from local backup."
+            )
+
+    if not network_ok and not files:
+        return {"files": [], "path": report_path, "exists": False, "from_backup": False}
+
+    return {
+        "files":       files,
+        "tags":        sorted(tags),
+        "path":        report_path,
+        "exists":      network_ok,
+        "from_backup": from_backup,
+    }
 
 
 @report_explorer_bp.route("/user_preferences", methods=["GET"])
@@ -679,6 +734,5 @@ def download_reports():
 
 @report_explorer_bp.route("/backup_status", methods=["GET"])
 def backup_status():
-    if not is_admin_request():
-        return jsonify({"error": "Forbidden"}), 403
-    return jsonify(backup_syncer.get_status())
+    data = _cached_data("backup_status", REPORT_EXPLORER_CACHE_TTL_SECONDS, backup_syncer.get_status)
+    return jsonify(data)
