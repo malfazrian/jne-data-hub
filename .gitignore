@@ -28,6 +28,7 @@ Thumbs.db
 
 # Runtime output and temp files
 output/
+temp/
 *.log
 *.tmp
 *.bak

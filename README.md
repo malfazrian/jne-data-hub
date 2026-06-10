@@ -79,7 +79,7 @@ performance_app/
 Install minimal package berikut:
 
 ```bash
-pip install flask waitress pandas numpy openpyxl python-dateutil duckdb selenium pywin32
+pip install flask waitress pandas numpy openpyxl xlrd python-dateutil duckdb selenium pywin32 psycopg2-binary
 ```
 
 Catatan:

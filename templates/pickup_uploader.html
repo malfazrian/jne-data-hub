@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Pickup Uploader</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="h-100">
+  <!-- === NAVBAR === -->
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}"
+            alt="JNE Logo"
+            width="50"
+            height="50"
+            class="me-2 d-inline-block align-middle">
+        CCC DS Data Hub
+        </a>
+
+        <button class="navbar-toggler bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+
+            <!-- Threads -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/hub">
+                <i class="bi bi-chat-square-text-fill me-1"></i> Hub
+            </a>
+            </li>
+
+            <!-- Performance Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/">
+                <i class="bi bi-bar-chart-fill me-1"></i> Performance
+            </a>
+            </li>
+
+            <!-- Full Mode -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/full">
+                <i class="bi bi-stack me-1"></i> Full Data
+            </a>
+            </li>
+
+            <!-- Report Mode -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report">
+                <i class="bi bi-file-earmark-text me-1"></i> Report
+            </a>
+            </li>
+
+            <!-- Report Explorer -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/report_explorer">
+                <i class="bi bi-folder2-open me-1"></i> Report Explorer
+            </a>
+            </li>
+
+            <!-- APEX Uploader -->
+            <li class="nav-item">
+            <a class="btn btn-sm btn-outline-light" href="/apex_uploader">
+                <i class="bi bi-arrow-down-up me-1"></i> Apex Uploader
+            </a>
+            </li>
+
+            <!-- APEX Requester -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-outline-light" href="/apex_requester">
+                <i class="bi bi-arrow-down me-1"></i> Apex Requester
+            </a>
+            </li>
+
+            <!-- Pickup Uploader -->
+            <li class="nav-item me-2">
+            <a class="btn btn-sm btn-active" href="/pickup-uploader">
+                <i class="bi bi-cloud-upload me-1"></i> Pickup Uploader
+            </a>
+            </li>
+            </ul>
+        </div>
+        </div>
+  </nav>
+
+  <main>
+  <div class="container mt-3" style="max-width: min(90%, 720px);">
+    <h1 class="mb-3">Pickup Uploader</h1>
+    <p class="text-muted mb-4">
+        Upload CSV atau Excel untuk lookup AWB ke database pickup dan unduh hasilnya.
+    </p>
+
+    <form id="pickupForm" enctype="multipart/form-data">
+      <div class="mb-3">
+        <label>Upload File AWB</label>
+        <input type="file" name="pickup_file" id="pickupFile" class="form-control" accept=".csv,.xlsx,.xls" required>
+      </div>
+      <button type="submit" id="mainBtn" class="btn btn-primary w-100">
+        <i class="bi bi-play-fill me-1"></i> Mulai Proses
+      </button>
+    </form>
+
+    <div class="mt-4" id="progressSection" style="display:none;">
+      <div class="progress mb-3">
+        <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+             style="width: 0%">0%</div>
+      </div>
+      <pre id="progressLog" class="bg-dark text-white p-3 rounded" style="height:180px;overflow:auto;"></pre>
+    </div>
+
+    <div id="messageBox" class="alert mt-4" style="display:none;"></div>
+
+    <div id="summarySection" class="mt-4" style="display:none;">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Summary</h2>
+          <div class="row g-3">
+            <div class="col-6">
+              <div class="p-3 bg-light rounded">
+                <div class="text-muted small">Total AWB terbaca</div>
+                <div class="fs-4 fw-bold" id="totalRead">0</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-3 bg-light rounded">
+                <div class="text-muted small">Total AWB unique</div>
+                <div class="fs-4 fw-bold" id="totalUnique">0</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-3 bg-light rounded">
+                <div class="text-muted small">Match database</div>
+                <div class="fs-4 fw-bold" id="totalMatch">0</div>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="p-3 bg-light rounded">
+                <div class="text-muted small">Tidak match</div>
+                <div class="fs-4 fw-bold" id="totalNotMatch">0</div>
+              </div>
+            </div>
+          </div>
+          <a id="downloadBtn" class="btn btn-success w-100 mt-4" href="#" style="display:none;">
+            <i class="bi bi-download me-1"></i> Download Result CSV
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  </main>
+
+  <!-- === FOOTER === -->
+  <footer>
+    <small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small>
+  </footer>
+
+<script>
+document.addEventListener("mousemove", (e) => {
+  const root = document.documentElement;
+  const x = `${(e.clientX / window.innerWidth) * 100}%`;
+  const y = `${(e.clientY / window.innerHeight) * 100}%`;
+  root.style.setProperty("--mouse-x", x);
+  root.style.setProperty("--mouse-y", y);
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("pickupForm");
+  const mainBtn = document.getElementById("mainBtn");
+  const fileInput = document.getElementById("pickupFile");
+  const progressSection = document.getElementById("progressSection");
+  const progressBar = document.getElementById("progressBar");
+  const progressLog = document.getElementById("progressLog");
+  const messageBox = document.getElementById("messageBox");
+  const summarySection = document.getElementById("summarySection");
+  const downloadBtn = document.getElementById("downloadBtn");
+
+  document.getElementById("year").textContent = new Date().getFullYear();
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    resetResult();
+
+    if (!fileInput.files.length) {
+      showMessage("Pilih file CSV atau Excel terlebih dahulu.", "warning");
+      return;
+    }
+
+    const formData = new FormData(form);
+
+    setLoading(true);
+    appendLog("Mengupload file...");
+    appendLog("Membaca AWB dan menyiapkan lookup database...");
+    setProgress(35);
+
+    try {
+      const res = await fetch("/pickup-uploader/upload", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Proses upload gagal.");
+      }
+
+      setProgress(100);
+      appendLog("Lookup selesai. File CSV hasil sudah siap diunduh.");
+      progressBar.classList.remove("progress-bar-animated");
+      progressBar.classList.add("bg-success");
+      renderSummary(data.summary, data.download_url);
+      showMessage("Proses selesai.", "success");
+    } catch (err) {
+      progressBar.classList.remove("progress-bar-animated");
+      showMessage(err.message || "Terjadi kesalahan saat memproses file.", "danger");
+      appendLog(`Error: ${err.message || "Proses gagal."}`);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  function setLoading(state) {
+    mainBtn.disabled = state;
+    fileInput.disabled = state;
+    if (state) {
+      mainBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Memproses...';
+      mainBtn.classList.remove("btn-primary");
+      mainBtn.classList.add("btn-secondary");
+      progressSection.style.display = "block";
+      progressBar.classList.add("progress-bar-animated");
+    } else {
+      mainBtn.innerHTML = '<i class="bi bi-play-fill me-1"></i> Mulai Proses';
+      mainBtn.classList.remove("btn-secondary");
+      mainBtn.classList.add("btn-primary");
+      fileInput.disabled = false;
+    }
+  }
+
+  function setProgress(value) {
+    const pct = Math.max(0, Math.min(100, value));
+    progressBar.style.width = `${pct}%`;
+    progressBar.textContent = `${pct}%`;
+  }
+
+  function appendLog(message) {
+    progressLog.textContent += `${message}\n`;
+    progressLog.scrollTop = progressLog.scrollHeight;
+  }
+
+  function renderSummary(summary, downloadUrl) {
+    document.getElementById("totalRead").textContent = summary.total_awb_read ?? 0;
+    document.getElementById("totalUnique").textContent = summary.total_awb_unique ?? 0;
+    document.getElementById("totalMatch").textContent = summary.total_db_match ?? 0;
+    document.getElementById("totalNotMatch").textContent = summary.total_not_match ?? 0;
+    summarySection.style.display = "block";
+    downloadBtn.href = downloadUrl;
+    downloadBtn.style.display = "inline-block";
+  }
+
+  function showMessage(message, type) {
+    messageBox.textContent = message;
+    messageBox.className = `alert alert-${type} mt-4`;
+    messageBox.style.display = "block";
+  }
+
+  function resetResult() {
+    messageBox.style.display = "none";
+    summarySection.style.display = "none";
+    downloadBtn.style.display = "none";
+    progressSection.style.display = "none";
+    progressLog.textContent = "";
+    progressBar.classList.remove("bg-success");
+    setProgress(0);
+  }
+});
+</script>
+</body>
+</html>
