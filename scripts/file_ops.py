@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from pywintypes import com_error
 from typing import Union, List
+from .data_ops import normalize_awb_value
 
 def ensure_folder(path):
     if not os.path.exists(path):
@@ -123,7 +124,9 @@ def split_csv_file(file_path: Path, output_folder: Path, chunk_size: int = 9999,
     """Membagi file CSV menjadi beberapa bagian dan menyimpannya ke folder output."""
     try:
         df = pd.read_csv(file_path, usecols=[0], header=None, dtype=str, names=["awb"])
-        df["awb"] = df["awb"].apply(lambda x: x if x.startswith("'") else f"'{x}")  # Tambahkan petik satu agar Excel baca sebagai teks
+        df["awb"] = df["awb"].apply(normalize_awb_value)
+        df = df[df["awb"].notna()]
+        df["awb"] = df["awb"].apply(lambda x: f"'{x}")  # Tambahkan petik satu agar Excel baca sebagai teks
 
         tanggal = datetime.today().strftime("%d%m%y")
 

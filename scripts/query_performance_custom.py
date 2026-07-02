@@ -1,4 +1,5 @@
 import os
+import codecs
 import pandas as pd
 from datetime import datetime, timedelta
 import openpyxl
@@ -7,6 +8,45 @@ from openpyxl.styles import Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from .add_column import add_grouping_late, add_aging_carrer, add_status_pod_2, fix_regional_cols, TRANSFORM_GROUPS, TRANSFORM_FUNCS
 from .parse_dates import normalize_all_dates
+
+
+CSV_ENCODINGS_TO_TRY = ("utf-8-sig", "utf-8", "cp1252", "latin1")
+
+
+def _can_decode_file(file_path, encoding, block_size=1024 * 1024):
+    decoder = codecs.getincrementaldecoder(encoding)()
+    with open(file_path, "rb") as file:
+        while True:
+            block = file.read(block_size)
+            if not block:
+                decoder.decode(b"", final=True)
+                return True
+            decoder.decode(block)
+
+
+def _detect_csv_encoding(file_path):
+    for encoding in CSV_ENCODINGS_TO_TRY:
+        try:
+            if _can_decode_file(file_path, encoding):
+                return encoding
+        except UnicodeDecodeError:
+            continue
+    return "latin1"
+
+
+def _read_csv(file_path, **kwargs):
+    encoding = _detect_csv_encoding(file_path)
+    try:
+        return pd.read_csv(file_path, encoding=encoding, **kwargs)
+    except UnicodeDecodeError:
+        for fallback_encoding in CSV_ENCODINGS_TO_TRY:
+            if fallback_encoding == encoding:
+                continue
+            try:
+                return pd.read_csv(file_path, encoding=fallback_encoding, **kwargs)
+            except UnicodeDecodeError:
+                continue
+    return pd.read_csv(file_path, encoding="latin1", **kwargs)
 
 
 class ProjectProcessor:
@@ -219,7 +259,7 @@ class ProjectProcessor:
         for folder_path, file_name in all_files:
             file_path = os.path.join(folder_path, file_name)
             try:
-                df_head = pd.read_csv(file_path, nrows=5)
+                df_head = _read_csv(file_path, nrows=5)
                 file_size = os.path.getsize(file_path)
                 avg_row_size = file_size / (len(df_head) + 1) if len(df_head) > 0 else 1000
                 estimated_rows = file_size / avg_row_size
@@ -251,7 +291,7 @@ class ProjectProcessor:
             print(f"   ⏳ Baca file: {file_path}")
 
             try:
-                chunk_iterator = pd.read_csv(file_path, chunksize=chunksize, low_memory=False)
+                chunk_iterator = _read_csv(file_path, chunksize=chunksize, low_memory=False)
             except Exception as e:
                 print(f"Error reading {file_path}: {e}")
                 continue

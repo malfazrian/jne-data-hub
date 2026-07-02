@@ -29,6 +29,15 @@ TEMP_FILE_MAX_AGE_SECONDS = 24 * 60 * 60
 RESULT_FILE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 
 
+def _detect_csv_separator(file_path):
+    try:
+        sample = file_path.read_text(encoding="utf-8-sig", errors="ignore")[:4096]
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        return dialect.delimiter
+    except Exception:
+        return ","
+
+
 def _allowed_file(filename):
     return Path(filename or "").suffix.lower() in ALLOWED_EXTENSIONS
 
@@ -61,34 +70,46 @@ def _awb_column_name(columns):
     for column in columns:
         if str(column).strip().lower() == "awb":
             return column
-    return columns[0] if len(columns) else None
+    return None
+
+
+def _csv_reader(file_path, header):
+    return pd.read_csv(
+        file_path,
+        dtype=str,
+        sep=_detect_csv_separator(file_path),
+        header=header,
+        chunksize=DEFAULT_CSV_CHUNK_SIZE,
+    )
+
+
+def _read_csv_header(file_path):
+    return pd.read_csv(
+        file_path,
+        dtype=str,
+        sep=_detect_csv_separator(file_path),
+        nrows=0,
+    )
 
 
 def _read_csv_awbs(file_path):
     awbs = []
-    try:
-        reader = pd.read_csv(
-            file_path,
-            dtype=str,
-            sep=None,
-            engine="python",
-            chunksize=DEFAULT_CSV_CHUNK_SIZE,
-        )
-    except Exception:
-        reader = pd.read_csv(
-            file_path,
-            dtype=str,
-            sep=",",
-            chunksize=DEFAULT_CSV_CHUNK_SIZE,
-        )
+    header_df = _read_csv_header(file_path)
+    awb_column = _awb_column_name(header_df.columns)
 
+    if awb_column is not None:
+        reader = _csv_reader(file_path, header=0)
+        for df in reader:
+            if awb_column in df.columns:
+                awbs.extend(_clean_values(df[awb_column]))
+        return awbs
+
+    reader = _csv_reader(file_path, header=None)
     for df in reader:
         if df.empty and len(df.columns) == 0:
             continue
 
-        column = _awb_column_name(df.columns)
-        if column is not None:
-            awbs.extend(_clean_values(df[column]))
+        awbs.extend(_clean_values(df.iloc[:, 0]))
     return awbs
 
 
@@ -110,9 +131,19 @@ def _read_excel_awbs(file_path):
             if df.empty and len(df.columns) == 0:
                 continue
 
-            column = _awb_column_name(df.columns)
-            if column is not None:
-                awbs.extend(_clean_values(df[column]))
+            awb_column = _awb_column_name(df.columns)
+            if awb_column is not None:
+                awbs.extend(_clean_values(df[awb_column]))
+                continue
+
+            raw_df = pd.read_excel(
+                excel_file,
+                sheet_name=sheet_name,
+                dtype=str,
+                header=None,
+            )
+            if not raw_df.empty and len(raw_df.columns) > 0:
+                awbs.extend(_clean_values(raw_df.iloc[:, 0]))
     return awbs
 
 
@@ -167,6 +198,31 @@ def _lookup_pickup_data(unique_awbs):
                     )
 
     return columns, rows, matched_awbs
+
+
+def _deduplicate_pickup_rows(columns, rows):
+    column_keys = [str(column).strip().lower() for column in columns]
+    if "pickup_cnote_no" not in column_keys or "pickup_status" not in column_keys:
+        return rows
+
+    awb_index = column_keys.index("pickup_cnote_no")
+    status_index = column_keys.index("pickup_status")
+    selected_rows = {}
+
+    def row_priority(row):
+        status = "" if row[status_index] is None else str(row[status_index]).strip().upper()
+        return 0 if status.startswith("F") else 1
+
+    for row in rows:
+        awb = "" if row[awb_index] is None else str(row[awb_index]).strip()
+        if not awb:
+            continue
+
+        current_row = selected_rows.get(awb)
+        if current_row is None or row_priority(row) > row_priority(current_row):
+            selected_rows[awb] = row
+
+    return list(selected_rows.values())
 
 
 def _excel_text_value(value):
@@ -289,6 +345,7 @@ def upload_pickup_file():
             return jsonify({"error": "Tidak ada AWB valid yang terbaca dari file."}), 400
 
         columns, rows, matched_awbs = _lookup_pickup_data(unique_awbs)
+        rows = _deduplicate_pickup_rows(columns, rows)
         filename, _ = _write_result_csv(columns, rows)
 
         return jsonify({

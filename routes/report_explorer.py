@@ -33,6 +33,19 @@ report_explorer_bp = Blueprint("report_explorer", __name__)
 
 REPORT_EXPLORER_CACHE_TTL_SECONDS = int(os.getenv("REPORT_EXPLORER_CACHE_TTL_SECONDS", "60"))
 STATUS_CACHE_TTL_SECONDS = int(os.getenv("REPORT_EXPLORER_STATUS_CACHE_TTL_SECONDS", "300"))
+REPORT_VIEWER_NOTICE_FILE = os.getenv(
+    "REPORT_VIEWER_NOTICE_FILE",
+    os.path.join(BASE_DIR, "data", "report_viewer_notice.json"),
+)
+
+REPORT_VIEWER_NOTICE_ICONS = {
+    "primary": "bi-info-circle-fill",
+    "secondary": "bi-info-circle-fill",
+    "success": "bi-check-circle-fill",
+    "danger": "bi-exclamation-octagon-fill",
+    "warning": "bi-exclamation-triangle-fill",
+    "info": "bi-info-circle-fill",
+}
 
 _cache_lock = threading.Lock()
 _cache_store = {}
@@ -60,6 +73,62 @@ def _cached_data(key, ttl_seconds, loader):
     with _cache_lock:
         _cache_store[key] = (time.time(), data)
     return data
+
+
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_report_viewer_notice(raw_notice):
+    if not isinstance(raw_notice, dict):
+        return None
+    if not raw_notice.get("enabled", True):
+        return None
+
+    message = str(raw_notice.get("message", "")).strip()
+    if not message:
+        return None
+
+    category = str(raw_notice.get("category", "info")).strip().lower()
+    if category not in REPORT_VIEWER_NOTICE_ICONS:
+        category = "info"
+
+    title = str(raw_notice.get("title", "")).strip()
+    icon = str(raw_notice.get("icon", "")).strip() or REPORT_VIEWER_NOTICE_ICONS[category]
+
+    return {
+        "category": category,
+        "icon": icon,
+        "title": title,
+        "message": message,
+        "dismissible": bool(raw_notice.get("dismissible", False)),
+    }
+
+
+def load_report_viewer_notice():
+    if os.path.exists(REPORT_VIEWER_NOTICE_FILE):
+        try:
+            with open(REPORT_VIEWER_NOTICE_FILE, "r", encoding="utf-8") as file:
+                return _normalize_report_viewer_notice(json.load(file))
+        except Exception as exc:
+            current_app.logger.warning(f"Error reading report viewer notice config: {exc}")
+            return None
+
+    env_message = os.getenv("REPORT_VIEWER_NOTICE_MESSAGE", "").strip()
+    if not env_message:
+        return None
+
+    return _normalize_report_viewer_notice({
+        "enabled": _env_bool("REPORT_VIEWER_NOTICE_ENABLED", True),
+        "category": os.getenv("REPORT_VIEWER_NOTICE_CATEGORY", "info"),
+        "icon": os.getenv("REPORT_VIEWER_NOTICE_ICON", ""),
+        "title": os.getenv("REPORT_VIEWER_NOTICE_TITLE", ""),
+        "message": env_message,
+        "dismissible": _env_bool("REPORT_VIEWER_NOTICE_DISMISSIBLE", False),
+    })
 
 
 # ── History / status helpers ──────────────────────────────────────────────────
@@ -421,7 +490,11 @@ def report_explorer():
     user_ip = get_client_ip()
     cleanup_old_recent_downloads(user_ip)
     today = datetime.datetime.now().strftime("%Y-%m-%d")
-    return render_template("report_viewer.html", today=today)
+    return render_template(
+        "report_viewer.html",
+        today=today,
+        report_viewer_notice=load_report_viewer_notice(),
+    )
 
 
 @report_explorer_bp.route("/parquet_source_status", methods=["GET"])

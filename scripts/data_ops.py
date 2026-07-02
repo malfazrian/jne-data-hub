@@ -1,6 +1,26 @@
 import os
 import pandas as pd
 
+def normalize_awb_value(value):
+    if pd.isna(value):
+        return None
+
+    awb = str(value).strip().replace("\\", "")
+    awb = awb.lstrip("'").strip()
+
+    if not awb or awb.lower() in {"nan", "none", "null"}:
+        return None
+
+    return awb
+
+def normalize_awb_values(values):
+    normalized = set()
+    for value in values:
+        awb = normalize_awb_value(value)
+        if awb:
+            normalized.add(awb)
+    return normalized
+
 def extract_awb_from_excel(file_path):
     awb_values = set()
     xls = pd.ExcelFile(file_path)
@@ -12,8 +32,7 @@ def extract_awb_from_excel(file_path):
             if "awb" in lower_columns:
                 original_awb_col = df_sample.columns[lower_columns.index("awb")]
                 df = pd.read_excel(file_path, sheet_name=sheet, usecols=[original_awb_col], dtype=str)
-                df[original_awb_col] = df[original_awb_col].astype(str).str.strip()
-                awb_values.update(df[original_awb_col].dropna().tolist())
+                awb_values.update(normalize_awb_values(df[original_awb_col].tolist()))
         except Exception as e:
             print(f"Gagal membaca sheet '{sheet}' di file '{file_path}': {e}")
     return awb_values
@@ -33,8 +52,7 @@ def extract_awb_from_csv(file_path):
             if "awb" in lower_columns:
                 original_awb_col = df_sample.columns[lower_columns.index("awb")]
                 df = pd.read_csv(file_path, usecols=[original_awb_col], dtype=str, encoding=enc)
-                df[original_awb_col] = df[original_awb_col].astype(str).str.strip()
-                return set(df[original_awb_col].dropna().tolist())
+                return normalize_awb_values(df[original_awb_col].tolist())
 
             print(f"[!] Kolom 'awb' tidak ditemukan di {file_path}")
             return set()
@@ -66,7 +84,7 @@ def extract_all_awbs_from_folder(folder_path):
     return awb_set
 
 def save_awbs_to_csv(awb_set, output_path):
-    awb_list = [f"'{awb}" for awb in sorted(awb_set)]
+    awb_list = [f"'{awb}" for awb in sorted(normalize_awb_values(awb_set))]
     df_awb = pd.DataFrame(awb_list, columns=["AWB"])
     df_awb.to_csv(output_path, index=False, header=False, encoding="utf-8")
     print(f"Proses selesai! Data AWB disimpan di: {output_path}")

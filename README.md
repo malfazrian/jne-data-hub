@@ -23,6 +23,8 @@ Aplikasi dijalankan dengan Waitress dan menyimpan output proses di folder `outpu
 - Endpoint UI: `/report_explorer`
 - Menampilkan list file report berdasarkan tanggal (`/list_reports`).
 - Download single/multiple file (otomatis zip jika lebih dari 1 file).
+- Notice banner operasional di halaman viewer, configurable lewat `data/report_viewer_notice.json`
+  atau env `REPORT_VIEWER_NOTICE_*`.
 - Menyimpan preferensi user per-IP:
   - favorites
   - recent downloads
@@ -175,6 +177,13 @@ Variable yang tersedia (lihat `.env.example`):
 - `PROCESS_HISTORY_SOURCE`
 - `PARQUET_PROCESSED_FILE`
 - `REPORT_EXPLORER_BASE`
+- `REPORT_VIEWER_NOTICE_FILE`
+- `REPORT_VIEWER_NOTICE_ENABLED`
+- `REPORT_VIEWER_NOTICE_CATEGORY`
+- `REPORT_VIEWER_NOTICE_TITLE`
+- `REPORT_VIEWER_NOTICE_MESSAGE`
+- `REPORT_VIEWER_NOTICE_ICON`
+- `REPORT_VIEWER_NOTICE_DISMISSIBLE`
 - `APEX_DEFAULT_HOSTS`
 
 Catatan:

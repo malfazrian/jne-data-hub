@@ -508,6 +508,32 @@
         </div>
       </div>
 
+      {% if report_viewer_notice %}
+      <div class="alert alert-{{ report_viewer_notice.category }}{% if report_viewer_notice.dismissible %} alert-dismissible fade show{% endif %} d-flex align-items-start gap-2 mb-4" role="alert">
+        <i class="bi {{ report_viewer_notice.icon }} fs-5"></i>
+        <div>
+          {% if report_viewer_notice.title %}
+            <strong>{{ report_viewer_notice.title }}</strong>
+          {% endif %}
+          <span{% if report_viewer_notice.title %} class="ms-1"{% endif %}>{{ report_viewer_notice.message }}</span>
+        </div>
+        {% if report_viewer_notice.dismissible %}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} d-flex align-items-start gap-2 mb-4" role="alert">
+            <i class="bi bi-info-circle-fill fs-5"></i>
+            <div>{{ message }}</div>
+          </div>
+        {% endfor %}
+      {% endif %}
+      {% endwith %}
+
       <!-- Filter Section -->
       <div class="card mb-4">
         <div class="card-body">
