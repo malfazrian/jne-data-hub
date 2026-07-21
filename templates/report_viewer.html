@@ -499,6 +499,9 @@
           Lihat, cari, dan download report yang sudah diproduksi.
         </p>
         <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-success" id="manualOverrideBtn" type="button">
+          <i class="bi bi-pencil-square me-1"></i> Manual Override
+        </button>
         <button class="btn btn-sm btn-primary" id="projectPicBtn" type="button">
           <i class="bi bi-people-fill me-1"></i> Project PIC
         </button>
@@ -771,15 +774,15 @@
               <div>
                 <div class="card status-kpi status-kpi-success h-100">
                   <div class="card-body">
-                    <small class="text-muted d-block">Processed ✅</small>
-                    <div class="status-kpi-value text-success" id="parquetTotalDone">0</div>
+                      <small class="text-muted d-block">Up to date</small>
+                      <div class="status-kpi-value text-success" id="parquetTotalDone">0</div>
                   </div>
                 </div>
               </div>
               <div>
                 <div class="card status-kpi status-kpi-warning h-100">
                   <div class="card-body">
-                    <small class="text-muted d-block">Failed / Pending ⚠️</small>
+                    <small class="text-muted d-block">Needs Run</small>
                     <div class="status-kpi-value text-warning" id="parquetTotalPending">0</div>
                   </div>
                 </div>
@@ -791,9 +794,11 @@
                 <tr>
                   <th>Bulan</th>
                   <th class="text-center">Total</th>
-                  <th class="text-center">Done</th>
+                  <th class="text-center">Up to date</th>
+                  <th class="text-center">Changed</th>
                   <th class="text-center">Failed</th>
                   <th class="text-center">Pending</th>
+                  <th class="text-center">Needs Run</th>
                 </tr>
               </thead>
               <tbody id="parquetMonthRows"></tbody>
@@ -907,6 +912,62 @@
     </div>
   </div>
 
+  <div class="modal fade" id="manualOverrideModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content border-0 rounded-4 overflow-hidden">
+        <div class="modal-header border-0 px-4 pt-4 pb-2">
+          <div>
+            <h5 class="modal-title fw-bold">
+              <i class="bi bi-pencil-square me-2 text-success"></i>Manual Override
+            </h5>
+            <small class="text-muted">Paste daftar AWB dan nilai override, lalu pilih kolom yang ingin diisi.</small>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body px-4 pb-4 pt-2">
+          <div id="manualAlert" class="alert d-none" role="alert"></div>
+          <div id="manualBulkPanel">
+            <div class="row g-4">
+              <div class="col-lg-8">
+                <label class="form-label fw-semibold" for="manualBulkText">Paste AWB + nilai override</label>
+                <textarea class="form-control font-monospace" id="manualBulkText" rows="10" spellcheck="false" placeholder="CSS0101178933601    TAWB2606264HJQYA&#10;CSS0101180677867    TAWB2606292GI0J0"></textarea>
+                <div class="form-text">
+                  Bisa dari Excel, chat, atau teks. Pemisah: Tab, beberapa spasi, koma, titik koma, atau <code>|</code>.
+                </div>
+              </div>
+
+              <div class="col-lg-4">
+                <label class="form-label fw-semibold" for="manualBulkTarget">Isi ke kolom</label>
+                <select class="form-select" id="manualBulkTarget">
+                  <option value="NOREF" selected>NOREF</option>
+                  <option value="STATUS_POD">STATUS_POD</option>
+                  <option value="RECEIVED/REASON">RECEIVED/REASON</option>
+                  <option value="URL_TTD">URL_TTD</option>
+                  <option value="URL_FOTO">URL_FOTO</option>
+                </select>
+
+                <div class="mt-3">
+                  <div class="small fw-semibold mb-1">Preview</div>
+                  <div class="alert alert-light border mb-0 small" id="manualBulkPreview">
+                    Paste data untuk melihat preview.
+                  </div>
+                </div>
+
+                <div class="d-grid gap-2 mt-3">
+                  <button class="btn btn-success" id="manualBulkSaveBtn" type="button" disabled>
+                    <i class="bi bi-cloud-arrow-up me-1"></i> Simpan Semua
+                  </button>
+                  <button class="btn btn-outline-secondary" id="manualBulkClearBtn" type="button">Reset Input</button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- === FOOTER === -->
   <footer>
     <small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small>
@@ -942,8 +1003,8 @@
 
     // Load user preferences and files when page loads
     document.addEventListener('DOMContentLoaded', async function() {
-      normalizeStatusKpi('parquetTotalDone', 'Processed', 'bi-check2-circle');
-      normalizeStatusKpi('parquetTotalPending', 'Failed / Pending', 'bi-exclamation-triangle');
+      normalizeStatusKpi('parquetTotalDone', 'Up to date', 'bi-check2-circle');
+      normalizeStatusKpi('parquetTotalPending', 'Needs Run', 'bi-arrow-repeat');
 
       await loadUserPreferences();
       await loadFiles();
@@ -952,6 +1013,12 @@
       if (projectPicBtn) {
         projectPicBtn.addEventListener('click', openProjectPicModal);
       }
+
+      document.getElementById('manualOverrideBtn')?.addEventListener('click', openManualOverrideModal);
+      document.getElementById('manualBulkText')?.addEventListener('input', updateManualBulkPreview);
+      document.getElementById('manualBulkTarget')?.addEventListener('change', updateManualBulkPreview);
+      document.getElementById('manualBulkSaveBtn')?.addEventListener('click', saveManualOverridesBulk);
+      document.getElementById('manualBulkClearBtn')?.addEventListener('click', clearManualBulkInput);
 
       const projectPicSearchInput = document.getElementById('projectPicSearchInput');
       const projectPicSearchBy = document.getElementById('projectPicSearchBy');
@@ -999,6 +1066,108 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function showManualAlert(message, type = 'success') {
+      const alertEl = document.getElementById('manualAlert');
+      alertEl.className = `alert alert-${type}`;
+      alertEl.textContent = message;
+    }
+
+    function parseManualBulkText() {
+      const text = document.getElementById('manualBulkText').value;
+      const rows = [];
+      const invalidLines = [];
+      text.split(/\r?\n/).forEach((rawLine, index) => {
+        const line = rawLine.trim();
+        if (!line) return;
+
+        let parts;
+        if (line.includes('\t')) parts = line.split(/\t+/);
+        else if (line.includes('|')) parts = line.split('|');
+        else if (line.includes(';')) parts = line.split(';');
+        else if (line.includes(',')) parts = line.split(',');
+        else {
+          const match = line.match(/^(\S+)\s+(.+)$/);
+          parts = match ? [match[1], match[2]] : [];
+        }
+
+        const awb = String(parts.shift() || '').trim().replace(/^'/, '');
+        const value = parts.join(' ').trim();
+        if (awb.toUpperCase() === 'AWB') return;
+        if (!awb || !value || awb.length > 100) {
+          invalidLines.push(index + 1);
+          return;
+        }
+        rows.push({awb, value});
+      });
+      return {rows, invalidLines};
+    }
+
+    function updateManualBulkPreview() {
+      const {rows, invalidLines} = parseManualBulkText();
+      const previewEl = document.getElementById('manualBulkPreview');
+      const saveBtn = document.getElementById('manualBulkSaveBtn');
+      const uniqueCount = new Set(rows.map(row => row.awb)).size;
+      const duplicateCount = rows.length - uniqueCount;
+      const target = document.getElementById('manualBulkTarget').value;
+      saveBtn.disabled = rows.length === 0;
+
+      if (!rows.length && !invalidLines.length) {
+        previewEl.innerHTML = 'Paste data untuk melihat preview.';
+        return;
+      }
+      const sample = rows.slice(0, 3)
+        .map(row => `<div class="text-truncate"><strong>${escapeHtml(row.awb)}</strong> → ${escapeHtml(row.value)}</div>`)
+        .join('');
+      previewEl.innerHTML = `
+        <div class="fw-semibold text-success mb-1">${uniqueCount} AWB valid → ${escapeHtml(target)}</div>
+        ${duplicateCount ? `<div class="text-warning">${duplicateCount} AWB duplikat (nilai terakhir dipakai)</div>` : ''}
+        ${invalidLines.length ? `<div class="text-danger">Baris tidak valid: ${invalidLines.slice(0, 8).join(', ')}</div>` : ''}
+        ${sample ? `<hr class="my-2">${sample}` : ''}
+      `;
+    }
+
+    function clearManualBulkInput() {
+      document.getElementById('manualBulkText').value = '';
+      updateManualBulkPreview();
+      document.getElementById('manualBulkText').focus();
+    }
+
+    async function saveManualOverridesBulk() {
+      const {rows, invalidLines} = parseManualBulkText();
+      if (!rows.length) return;
+      if (invalidLines.length && !confirm(`${invalidLines.length} baris tidak valid akan dilewati. Lanjutkan?`)) return;
+
+      const target = document.getElementById('manualBulkTarget').value;
+      const saveBtn = document.getElementById('manualBulkSaveBtn');
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...';
+      try {
+        const response = await fetch('/manual_overrides/bulk', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({target_column: target, rows})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Gagal menyimpan data massal.');
+        const details = `${data.created} baru, ${data.updated} diperbarui`;
+        showManualAlert(`${data.message} (${details}).`, 'success');
+        clearManualBulkInput();
+      } catch (error) {
+        showManualAlert(error.message, 'danger');
+        saveBtn.disabled = false;
+      } finally {
+        saveBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Simpan Semua';
+        updateManualBulkPreview();
+      }
+    }
+
+    function openManualOverrideModal() {
+      document.getElementById('manualAlert').classList.add('d-none');
+      updateManualBulkPreview();
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('manualOverrideModal')).show();
+      setTimeout(() => document.getElementById('manualBulkText').focus(), 250);
     }
 
     async function openProjectPicModal() {
@@ -1140,7 +1309,7 @@
           const pd = await parquetRes.value.json();
           parquetTotalExcelEl.textContent = String(pd.total_excel);
           parquetTotalDoneEl.textContent = String(pd.total_done);
-          parquetTotalPendingEl.textContent = String(pd.total_failed + pd.total_unprocessed);
+          parquetTotalPendingEl.textContent = String(pd.total_needs_run ?? (pd.total_failed + pd.total_unprocessed + (pd.total_changed || 0)));
           parquetMonthRowsEl.innerHTML = '';
           (pd.months || []).forEach(m => {
             const dirNote = m.dir_exists ? '' : ' <small class="text-muted">(dir tidak ada)</small>';
@@ -1149,8 +1318,10 @@
               <td>${escapeHtml(m.label)}${dirNote}</td>
               <td class="text-center">${m.total}</td>
               <td class="text-center text-success fw-semibold">${m.done}</td>
+              <td class="text-center ${(m.changed || 0) > 0 ? 'text-warning fw-semibold' : 'text-muted'}">${m.changed || 0}</td>
               <td class="text-center ${m.failed > 0 ? 'text-danger' : 'text-muted'}">${m.failed}</td>
               <td class="text-center ${m.unprocessed > 0 ? 'text-warning' : 'text-muted'}">${m.unprocessed}</td>
+              <td class="text-center ${(m.needs_run || 0) > 0 ? 'text-warning fw-semibold' : 'text-muted'}">${m.needs_run || 0}</td>
             `;
             parquetMonthRowsEl.appendChild(tr);
           });

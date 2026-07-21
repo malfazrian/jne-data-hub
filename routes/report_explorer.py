@@ -5,6 +5,7 @@ Routes: /report_explorer, /parquet_source_status, /report_history_status,
         /track_download, /download_reports, /backup_status
 """
 import os
+import csv
 import json
 import datetime
 import io
@@ -37,6 +38,17 @@ REPORT_VIEWER_NOTICE_FILE = os.getenv(
     "REPORT_VIEWER_NOTICE_FILE",
     os.path.join(BASE_DIR, "data", "report_viewer_notice.json"),
 )
+MANUALS_PATH = os.getenv(
+    "MANUALS_PATH",
+    r"D:\RYAN\Python Scripts\Bot Report Gabungan\data\manuals.csv",
+)
+MANUAL_COLUMNS = [
+    "AWB", "ID_ACCOUNT", "TGL_ENTRY", "STATUS_POD", "RECEIVED/REASON",
+    "URL_TTD", "URL_FOTO", "NOREF",
+]
+MANUAL_OVERRIDE_TARGET_COLUMNS = [
+    "NOREF", "STATUS_POD", "RECEIVED/REASON", "URL_TTD", "URL_FOTO",
+]
 
 REPORT_VIEWER_NOTICE_ICONS = {
     "primary": "bi-info-circle-fill",
@@ -49,6 +61,41 @@ REPORT_VIEWER_NOTICE_ICONS = {
 
 _cache_lock = threading.Lock()
 _cache_store = {}
+_manuals_lock = threading.Lock()
+
+
+def _normalize_manual_awb(value):
+    return str(value or "").strip().lstrip("'")
+
+
+def _read_manual_rows():
+    if not os.path.exists(MANUALS_PATH):
+        return []
+    with open(MANUALS_PATH, "r", newline="", encoding="utf-8-sig") as csv_file:
+        reader = csv.DictReader(csv_file)
+        if not reader.fieldnames or "AWB" not in reader.fieldnames:
+            raise ValueError("manuals.csv tidak memiliki kolom AWB")
+        return [
+            {column: str(row.get(column, "") or "") for column in MANUAL_COLUMNS}
+            for row in reader
+        ]
+
+
+def _write_manual_rows(rows):
+    target = Path(MANUALS_PATH)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+    try:
+        with temp_path.open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=MANUAL_COLUMNS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+            csv_file.flush()
+            os.fsync(csv_file.fileno())
+        os.replace(temp_path, target)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
 
 
 def _cache_get(key, ttl_seconds):
@@ -193,7 +240,12 @@ def find_best_query_match(edit_report_name, query_dates):
 
 
 def load_parquet_source_status():
-    """Scan last 3 months of source Excel dirs and compare against processed_files.json."""
+    """Scan source Excel dirs and show what the parquet stage would process next.
+
+    The parquet script reprocesses all OPEN/LOAD files in a month when any
+    OPEN/LOAD source is new, failed, or has a different mtime. Mirror that here
+    so the viewer does not show a month as safe while the next run still has work.
+    """
     today = datetime.date.today()
 
     months_to_check = []
@@ -218,6 +270,34 @@ def load_parquet_source_status():
 
     month_rows = []
     grand_total = grand_done = grand_failed = grand_unprocessed = 0
+    grand_changed = grand_needs_run = 0
+
+    def file_key(path):
+        try:
+            return os.path.getmtime(path)
+        except OSError:
+            return None
+
+    def classify_file(path):
+        rec = processed_log.get(os.path.normcase(path))
+        key = file_key(path)
+
+        if rec is None:
+            return "unprocessed"
+
+        if isinstance(rec, dict):
+            status = rec.get("status")
+            previous_key = rec.get("mtime")
+            if status == "failed":
+                return "failed"
+            if status == "done" and previous_key == key:
+                return "done"
+            return "changed"
+
+        if isinstance(rec, (int, float)):
+            return "done" if rec == key else "changed"
+
+        return "unprocessed"
 
     for yr, mo in months_to_check:
         label    = f"{_BULAN[mo]} {yr}"
@@ -226,9 +306,11 @@ def load_parquet_source_status():
         dir_exists = os.path.isdir(dir_path)
 
         mo_total = mo_done = mo_failed = mo_unprocessed = 0
+        mo_changed = mo_needs_run = 0
 
         if dir_exists:
             try:
+                excel_files = []
                 for entry in os.scandir(dir_path):
                     if not entry.is_file():
                         continue
@@ -236,17 +318,35 @@ def load_parquet_source_status():
                         continue
                     if not entry.name.lower().endswith(".xlsx"):
                         continue
+                    if not any(keyword in entry.name.upper() for keyword in ("OPEN", "LOAD", "CLOSE")):
+                        continue
+                    excel_files.append(entry.path)
+
+                file_rows = []
+                open_has_work = False
+                for path in excel_files:
+                    name = os.path.basename(path).upper()
+                    is_open = ("OPEN" in name) or ("LOAD" in name)
+                    status = classify_file(path)
+                    if is_open and status != "done":
+                        open_has_work = True
+                    file_rows.append((path, is_open, status))
+
+                for _path, is_open, status in file_rows:
                     mo_total += 1
-                    norm = os.path.normcase(entry.path)
-                    rec  = processed_log.get(norm)
-                    if rec is None:
-                        mo_unprocessed += 1
-                    elif rec.get("status") == "done":
-                        mo_done += 1
-                    elif rec.get("status") == "failed":
-                        mo_failed += 1
+
+                    script_will_process = status != "done" or (is_open and open_has_work)
+                    if script_will_process:
+                        mo_needs_run += 1
                     else:
+                        mo_done += 1
+
+                    if status == "failed":
+                        mo_failed += 1
+                    elif status == "unprocessed":
                         mo_unprocessed += 1
+                    elif status == "changed":
+                        mo_changed += 1
             except Exception as exc:
                 current_app.logger.error(f"Error scanning {dir_path}: {exc}")
 
@@ -254,6 +354,8 @@ def load_parquet_source_status():
         grand_done        += mo_done
         grand_failed      += mo_failed
         grand_unprocessed += mo_unprocessed
+        grand_changed     += mo_changed
+        grand_needs_run   += mo_needs_run
 
         month_rows.append({
             "label":      label,
@@ -262,6 +364,8 @@ def load_parquet_source_status():
             "done":       mo_done,
             "failed":     mo_failed,
             "unprocessed": mo_unprocessed,
+            "changed":     mo_changed,
+            "needs_run":   mo_needs_run,
         })
 
     return {
@@ -270,6 +374,8 @@ def load_parquet_source_status():
         "total_done":       grand_done,
         "total_failed":     grand_failed,
         "total_unprocessed": grand_unprocessed,
+        "total_changed":     grand_changed,
+        "total_needs_run":   grand_needs_run,
         "log_source":       PARQUET_PROCESSED_FILE,
         "log_exists":       log_exists,
     }
@@ -495,6 +601,172 @@ def report_explorer():
         today=today,
         report_viewer_notice=load_report_viewer_notice(),
     )
+
+
+@report_explorer_bp.route("/manual_overrides", methods=["GET"])
+def list_manual_overrides():
+    query = _normalize_manual_awb(request.args.get("q", "")).lower()
+    try:
+        with _manuals_lock:
+            rows = _read_manual_rows()
+        if query:
+            rows = [
+                row for row in rows
+                if query in _normalize_manual_awb(row.get("AWB")).lower()
+                or query in str(row.get("NOREF", "")).lower()
+                or query in str(row.get("RECEIVED/REASON", "")).lower()
+            ]
+        rows.reverse()
+        return jsonify({"rows": rows[:50], "total": len(rows)})
+    except Exception as exc:
+        current_app.logger.exception("Gagal membaca manual overrides")
+        return jsonify({"error": f"Gagal membaca manuals.csv: {exc}"}), 500
+
+
+@report_explorer_bp.route("/manual_overrides", methods=["POST"])
+def save_manual_override():
+    payload = request.get_json(silent=True) or {}
+    awb = _normalize_manual_awb(payload.get("AWB"))
+    original_awb = _normalize_manual_awb(payload.get("original_awb")) or awb
+    if not awb:
+        return jsonify({"error": "AWB wajib diisi."}), 400
+    if len(awb) > 100:
+        return jsonify({"error": "AWB maksimal 100 karakter."}), 400
+
+    saved_row = {
+        column: str(payload.get(column, "") or "").strip()
+        for column in MANUAL_COLUMNS
+    }
+    # Excel-friendly text representation, consistent with the existing CSV.
+    saved_row["AWB"] = f"'{awb}"
+
+    try:
+        with _manuals_lock:
+            rows = _read_manual_rows()
+            matching_indexes = [
+                index for index, row in enumerate(rows)
+                if _normalize_manual_awb(row.get("AWB")) == original_awb
+            ]
+            if matching_indexes:
+                first_index = matching_indexes[0]
+                rows[first_index] = saved_row
+                duplicate_indexes = set(matching_indexes[1:])
+                rows = [row for index, row in enumerate(rows) if index not in duplicate_indexes]
+                action = "updated"
+            else:
+                rows.append(saved_row)
+                action = "created"
+            _write_manual_rows(rows)
+        return jsonify({"message": "Manual override berhasil disimpan.", "action": action, "row": saved_row})
+    except Exception as exc:
+        current_app.logger.exception("Gagal menyimpan manual override")
+        return jsonify({"error": f"Gagal menyimpan manuals.csv: {exc}"}), 500
+
+
+@report_explorer_bp.route("/manual_overrides/bulk", methods=["POST"])
+def save_manual_overrides_bulk():
+    payload = request.get_json(silent=True) or {}
+    target_column = str(payload.get("target_column", "NOREF")).strip().upper()
+    if target_column not in MANUAL_OVERRIDE_TARGET_COLUMNS:
+        return jsonify({"error": "Kolom tujuan tidak valid."}), 400
+
+    incoming_rows = payload.get("rows")
+    if not isinstance(incoming_rows, list) or not incoming_rows:
+        return jsonify({"error": "Belum ada data valid untuk disimpan."}), 400
+    if len(incoming_rows) > 5000:
+        return jsonify({"error": "Maksimal 5.000 baris per sekali simpan."}), 400
+
+    # Last pasted value wins when an AWB occurs more than once.
+    values_by_awb = {}
+    invalid_count = 0
+    for item in incoming_rows:
+        if not isinstance(item, dict):
+            invalid_count += 1
+            continue
+        awb = _normalize_manual_awb(item.get("awb"))
+        value = str(item.get("value", "") or "").strip()
+        if not awb or len(awb) > 100 or not value:
+            invalid_count += 1
+            continue
+        values_by_awb[awb] = value
+
+    if not values_by_awb:
+        return jsonify({"error": "Tidak ada pasangan AWB dan nilai yang valid."}), 400
+
+    try:
+        with _manuals_lock:
+            rows = _read_manual_rows()
+            first_index_by_awb = {}
+            for index, row in enumerate(rows):
+                normalized = _normalize_manual_awb(row.get("AWB"))
+                first_index_by_awb.setdefault(normalized, index)
+
+            created = 0
+            updated = 0
+            for awb, value in values_by_awb.items():
+                if awb in first_index_by_awb:
+                    row = rows[first_index_by_awb[awb]]
+                    row[target_column] = value
+                    row["AWB"] = f"'{awb}"
+                    updated += 1
+                else:
+                    new_row = {column: "" for column in MANUAL_COLUMNS}
+                    new_row["AWB"] = f"'{awb}"
+                    new_row[target_column] = value
+                    first_index_by_awb[awb] = len(rows)
+                    rows.append(new_row)
+                    created += 1
+
+            # Consolidate pre-existing duplicate rows for AWBs touched by this batch.
+            touched = set(values_by_awb)
+            seen_touched = set()
+            deduped_rows = []
+            removed_duplicates = 0
+            for row in rows:
+                normalized = _normalize_manual_awb(row.get("AWB"))
+                if normalized in touched:
+                    if normalized in seen_touched:
+                        removed_duplicates += 1
+                        continue
+                    seen_touched.add(normalized)
+                deduped_rows.append(row)
+
+            _write_manual_rows(deduped_rows)
+
+        return jsonify({
+            "message": f"{len(values_by_awb)} manual override berhasil disimpan.",
+            "processed": len(values_by_awb),
+            "created": created,
+            "updated": updated,
+            "invalid": invalid_count,
+            "input_duplicates": len(incoming_rows) - invalid_count - len(values_by_awb),
+            "removed_duplicates": removed_duplicates,
+            "target_column": target_column,
+        })
+    except Exception as exc:
+        current_app.logger.exception("Gagal menyimpan bulk manual overrides")
+        return jsonify({"error": f"Gagal menyimpan manuals.csv: {exc}"}), 500
+
+
+@report_explorer_bp.route("/manual_overrides/<path:awb>", methods=["DELETE"])
+def delete_manual_override(awb):
+    normalized_awb = _normalize_manual_awb(awb)
+    if not normalized_awb:
+        return jsonify({"error": "AWB tidak valid."}), 400
+    try:
+        with _manuals_lock:
+            rows = _read_manual_rows()
+            remaining = [
+                row for row in rows
+                if _normalize_manual_awb(row.get("AWB")) != normalized_awb
+            ]
+            if len(remaining) == len(rows):
+                return jsonify({"error": "AWB tidak ditemukan."}), 404
+            _write_manual_rows(remaining)
+        return jsonify({"message": "Manual override berhasil dihapus."})
+    except Exception as exc:
+        current_app.logger.exception("Gagal menghapus manual override")
+        return jsonify({"error": f"Gagal memperbarui manuals.csv: {exc}"}), 500
 
 
 @report_explorer_bp.route("/parquet_source_status", methods=["GET"])
