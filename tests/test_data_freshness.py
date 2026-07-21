@@ -10,7 +10,9 @@ from routes import data_freshness
 def test_classifies_fresh_warning_stale_and_unknown():
     now = datetime.datetime(2026, 7, 21, 12, 0, 0)
 
-    assert data_freshness.classify_freshness(now - datetime.timedelta(hours=2), now)["status"] == "fresh"
+    fresh = data_freshness.classify_freshness(now - datetime.timedelta(hours=2), now)
+    assert fresh["status"] == "fresh"
+    assert fresh["label"] == "Update"
     assert data_freshness.classify_freshness(now - datetime.timedelta(hours=30), now)["status"] == "warning"
     assert data_freshness.classify_freshness(now - datetime.timedelta(hours=60), now)["status"] == "stale"
     assert data_freshness.classify_freshness(None, now)["status"] == "unknown"

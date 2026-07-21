@@ -92,7 +92,7 @@ def classify_freshness(updated_at, now=None):
     age_hours = max(0.0, (now - updated_at).total_seconds() / 3600)
 
     if age_hours <= FRESH_HOURS:
-        status, label = "fresh", "Terbarui"
+        status, label = "fresh", "Update"
     elif age_hours <= STALE_HOURS:
         status, label = "warning", "Perlu diperbarui"
     else:
