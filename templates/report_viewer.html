@@ -92,6 +92,24 @@
       border-color: #0d6efd;
     }
 
+    .filter-count {
+      display: inline-flex;
+      min-width: 1.5rem;
+      justify-content: center;
+      margin-left: .35rem;
+      padding: .1rem .4rem;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: #526077;
+      font-size: .7rem;
+      font-weight: 700;
+    }
+
+    .filter-tab.active .filter-count {
+      background: rgba(255, 255, 255, .2);
+      color: #fff;
+    }
+
     #tagSelect:not(.tomselected) {
       display: block;
       width: 100%;
@@ -654,9 +672,11 @@
       <div class="filter-tabs">
         <div class="filter-tab active" data-filter="all">
           <i class="bi bi-file-earmark me-1"></i> Semua File
+          <span class="filter-count" id="allFilesCount">0</span>
         </div>
         <div class="filter-tab" data-filter="favorites">
           <i class="bi bi-star-fill me-1"></i> Favorit
+          <span class="filter-count" id="favoriteFilesCount">0</span>
         </div>
           <button class="see-all-btn ms-auto" id="selectionModeBtn" type="button" aria-pressed="false">
             <i class="bi bi-check2-square me-1"></i> Pilih beberapa
@@ -717,16 +737,17 @@
       </div>
 
       <!-- File List -->
-      <h6 class="section-title" id="favoriteSectionTitle">
-        ⭐ Favorite Reports
-      </h6>
-      <div id="favoriteList" class="row g-3 mb-4"></div>
-
-      <h6 class="section-title" id="allReportsSectionTitle">
+      <h6 class="section-title" id="reportListTitle">
         📄 All Reports
       </h6>
 
       <div id="fileList" class="row g-3"></div>
+
+      <div id="filterEmptyState" class="text-center py-5" style="display: none;">
+        <i class="bi bi-star" style="font-size: 2.5rem; color: #b8c2d1;"></i>
+        <p class="fw-semibold mb-1 mt-2">Belum ada report favorit</p>
+        <p class="text-muted small mb-0">Klik ikon bintang pada report untuk menambahkannya di sini.</p>
+      </div>
 
       <div id="reportRenderControls" class="report-render-controls" aria-live="polite">
         <span id="reportRenderCount"></span>
@@ -1742,39 +1763,23 @@
         });
       }
       
-      // Sort: favorites first
+      // Keep a stable, predictable order in both views.
       filtered.sort((a, b) => {
-        const aKey = extractFileKey(a.name);
-        const bKey = extractFileKey(b.name);
-        const aFav = userPreferences.favorites.includes(aKey);
-        const bFav = userPreferences.favorites.includes(bKey);
-        
-        if (aFav && !bFav) return -1;
-        if (!aFav && bFav) return 1;
-        
-        // Then by modified date
         return b.modified_ts - a.modified_ts;
       });
       
       currentFilteredFiles = filtered;
       visibleReportLimit = REPORT_BATCH_SIZE;
+      updateFilterCounts();
       renderFiles();
-      
-      // Toggle section visibility based on filter
-      const favTitle = document.getElementById('favoriteSectionTitle');
-      const allTitle = document.getElementById('allReportsSectionTitle');
-      const favoriteList = document.getElementById('favoriteList');
-      const fileList = document.getElementById('fileList');
-      
-      if (currentFilter === 'favorites') {
-        // Favorite mode: hide "All Reports" section
-        allTitle.style.display = 'none';
-        fileList.style.display = 'none';
-      } else {
-        // All mode: show both sections
-        allTitle.style.display = 'block';
-        fileList.style.display = 'flex';
-      }
+    }
+
+    function updateFilterCounts() {
+      const favoriteCount = allFiles.reduce((count, file) => {
+        return count + (userPreferences.favorites.includes(extractFileKey(file.name)) ? 1 : 0);
+      }, 0);
+      document.getElementById('allFilesCount').textContent = allFiles.length.toLocaleString('id-ID');
+      document.getElementById('favoriteFilesCount').textContent = favoriteCount.toLocaleString('id-ID');
     }
 
     function getFileTags(file) {
@@ -1950,57 +1955,29 @@
     }
 
     function renderFiles() {
-      const favoriteList = document.getElementById('favoriteList');
       const fileList = document.getElementById('fileList');
-      const favTitle = document.getElementById('favoriteSectionTitle');
+      const listTitle = document.getElementById('reportListTitle');
+      const filterEmptyState = document.getElementById('filterEmptyState');
       const files = currentFilteredFiles.slice(0, visibleReportLimit);
-      
-      favoriteList.innerHTML = '';
+
       fileList.innerHTML = '';
-      
-      // Separate favorites and non-favorites
-      const favorites = [];
-      const nonFavorites = [];
-      
-      files.forEach(file => {
-        const fileKey = extractFileKey(file.name);
-        const isFavorite = userPreferences.favorites.includes(fileKey);
-        
-        if (isFavorite) {
-          favorites.push(file);
-        } else {
-          nonFavorites.push(file);
-        }
-      });
-      
-      // Show/hide favorite section
-      if (favorites.length === 0) {
-        favTitle.style.display = 'none';
-        favoriteList.style.display = 'none';
-      } else {
-        favTitle.style.display = 'block';
-        favoriteList.style.display = 'flex';
-      }
-      
-      // Render favorites
-      const favoriteFragment = document.createDocumentFragment();
-      favorites.forEach(file => {
-        const col = createFileCard(file, favoriteList);
-        favoriteFragment.appendChild(col);
-      });
-      favoriteList.appendChild(favoriteFragment);
-      
-      // Render non-favorites
+      listTitle.innerHTML = currentFilter === 'favorites'
+        ? '<i class="bi bi-star-fill me-1 text-warning"></i> Favorite Reports'
+        : '<i class="bi bi-files me-1"></i> All Reports';
+      filterEmptyState.style.display = currentFilter === 'favorites' && currentFilteredFiles.length === 0
+        ? 'block'
+        : 'none';
+
       const fileFragment = document.createDocumentFragment();
-      nonFavorites.forEach(file => {
-        const col = createFileCard(file, fileList);
+      files.forEach(file => {
+        const col = createFileCard(file);
         fileFragment.appendChild(col);
       });
       fileList.appendChild(fileFragment);
       updateReportRenderControls();
     }
     
-    function createFileCard(file, container) {
+    function createFileCard(file) {
       const col = document.createElement('div');
       col.className = 'col-md-6 col-lg-4';
       

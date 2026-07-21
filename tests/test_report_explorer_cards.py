@@ -78,3 +78,14 @@ def test_bulk_controls_use_explicit_selection_mode():
     assert "selection-mode-active" in source
     assert "if (!selectionMode) return;" in source
     assert ".file-checkbox" in source
+
+
+def test_all_and_favorite_tabs_are_mutually_exclusive_views():
+    source = TEMPLATE.read_text(encoding="utf-8")
+
+    assert 'id="allFilesCount"' in source
+    assert 'id="favoriteFilesCount"' in source
+    assert 'id="reportListTitle"' in source
+    assert 'id="favoriteList"' not in source
+    assert "function updateFilterCounts()" in source
+    assert "return b.modified_ts - a.modified_ts" in source
