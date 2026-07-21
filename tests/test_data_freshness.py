@@ -53,3 +53,10 @@ def test_pages_include_reusable_freshness_chip():
     for template in ("index.html", "pickup_uploader.html", "dwr_uploader.html"):
         source = (root / template).read_text(encoding="utf-8")
         assert '{% include "_data_freshness.html" %}' in source
+
+
+def test_page_title_spaces_status_responsively():
+    css = (Path(__file__).parents[1] / "static" / "style.css").read_text(encoding="utf-8")
+    title_rule = css.split(".page-title-with-status {", 1)[1].split("}", 1)[0]
+    assert "justify-content: space-between" in title_rule
+    assert "@media (max-width: 576px)" in css

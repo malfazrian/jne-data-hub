@@ -426,8 +426,17 @@ a:hover {
 .page-title-with-status {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: .65rem 1rem;
+}
+
+@media (max-width: 576px) {
+  .page-title-with-status {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
 }
 
 .data-freshness-chip {
