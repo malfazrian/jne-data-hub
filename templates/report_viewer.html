@@ -11,13 +11,60 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <style>
     .action-bar {
-      position: sticky;
-      top: 70px;
-      z-index: 100;
-      background: white;
-      padding: 1rem;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      position: fixed;
+      z-index: 4100;
+      bottom: 1.25rem;
+      left: 50%;
+      width: min(900px, calc(100% - 2rem));
+      padding: .8rem 1rem;
+      border: 1px solid rgba(255, 255, 255, .12);
+      border-radius: 14px;
+      background: #10264b;
+      color: #fff;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, .28);
+      transform: translateX(-50%);
+    }
+
+    body.selection-mode-active main {
+      padding-bottom: 6rem;
+    }
+
+    .file-checkbox {
+      display: none;
+    }
+
+    body.selection-mode-active .file-checkbox {
+      display: block;
+    }
+
+    body.selection-mode-active .file-card-footer {
+      visibility: hidden;
+    }
+
+    body.selection-mode-active .star-btn {
+      display: none;
+    }
+
+    @media (max-width: 767.98px) {
+      .action-bar > div {
+        align-items: stretch !important;
+        flex-direction: column;
+        gap: .65rem;
+      }
+
+      .action-bar .bulk-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .5rem;
+      }
+
+      .action-bar .bulk-actions .btn {
+        margin: 0 !important;
+      }
+
+      .action-bar .bulk-actions .btn-success {
+        grid-column: 1 / -1;
+      }
     }
     .filter-tabs {
       display: flex;
@@ -611,7 +658,10 @@
         <div class="filter-tab" data-filter="favorites">
           <i class="bi bi-star-fill me-1"></i> Favorit
         </div>
-          <button class="see-all-btn ms-auto" id="seeAllBtn">
+          <button class="see-all-btn ms-auto" id="selectionModeBtn" type="button" aria-pressed="false">
+            <i class="bi bi-check2-square me-1"></i> Pilih beberapa
+          </button>
+          <button class="see-all-btn" id="seeAllBtn">
             <i class="bi bi-clock-history me-1"></i> See Recently Downloaded
             <span class="badge bg-danger text-light ms-2" id="recentCount">0</span>
           </button>
@@ -638,17 +688,18 @@
       </div>
 
       <!-- Action Bar -->
-      <div class="action-bar mb-3" id="actionBar" style="display: none;">
+      <div class="action-bar" id="actionBar" style="display: none;">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <span class="badge bg-primary" id="selectedCount">0 dipilih</span>
+            <i class="bi bi-check2-circle me-1"></i>
+            <strong id="selectedCount">0 report dipilih</strong>
           </div>
-          <div>
-            <button class="btn btn-sm btn-outline-secondary me-2" id="selectAllBtn">
+          <div class="bulk-actions">
+            <button class="btn btn-sm btn-outline-light me-2" id="selectAllBtn">
               <i class="bi bi-check-all me-1"></i> Pilih Semua
             </button>
-            <button class="btn btn-sm btn-outline-secondary me-2" id="deselectAllBtn">
-              <i class="bi bi-x-circle me-1"></i> Batal Pilih
+            <button class="btn btn-sm btn-outline-light me-2" id="cancelSelectionBtn">
+              <i class="bi bi-x-circle me-1"></i> Batal
             </button>
             <button class="btn btn-sm btn-success" id="downloadSelectedBtn" disabled>
               <i class="bi bi-download me-1"></i> Download Terpilih
@@ -1051,6 +1102,7 @@
     let currentFilteredFiles = [];
     let visibleReportLimit = REPORT_BATCH_SIZE;
     let searchDebounceTimer = null;
+    let selectionMode = false;
 
     // Load user preferences and files when page loads
     document.addEventListener('DOMContentLoaded', async function() {
@@ -1770,8 +1822,30 @@
       return nameWithoutExt.trim();
     }
 
+    function setSelectionMode(enabled, rerender = true) {
+      selectionMode = Boolean(enabled);
+      document.body.classList.toggle('selection-mode-active', selectionMode);
+
+      const actionBar = document.getElementById('actionBar');
+      const modeButton = document.getElementById('selectionModeBtn');
+      actionBar.style.display = selectionMode ? 'block' : 'none';
+      modeButton.setAttribute('aria-pressed', selectionMode ? 'true' : 'false');
+      modeButton.innerHTML = selectionMode
+        ? '<i class="bi bi-x-lg me-1"></i> Tutup pilihan'
+        : '<i class="bi bi-check2-square me-1"></i> Pilih beberapa';
+
+      if (!selectionMode) selectedFiles.clear();
+      if (rerender) renderFiles();
+      updateActionBar();
+    }
+
+    document.getElementById('selectionModeBtn').addEventListener('click', function() {
+      setSelectionMode(!selectionMode);
+    });
+
     // Select All
     document.getElementById('selectAllBtn').addEventListener('click', function() {
+      if (!selectionMode) return;
       currentFilteredFiles.forEach(file => {
         selectedFiles.add(file.rel_path || file.name);
       });
@@ -1779,16 +1853,14 @@
       updateActionBar();
     });
 
-    // Deselect All
-    document.getElementById('deselectAllBtn').addEventListener('click', function() {
-      selectedFiles.clear();
-      renderFiles();
-      updateActionBar();
+    // Exit multi-selection
+    document.getElementById('cancelSelectionBtn').addEventListener('click', function() {
+      setSelectionMode(false);
     });
 
     // Download Selected
     document.getElementById('downloadSelectedBtn').addEventListener('click', function() {
-      if (selectedFiles.size === 0) return;
+      if (!selectionMode || selectedFiles.size === 0) return;
       
       const date = document.getElementById('reportDate').value;
       const files = Array.from(selectedFiles);
@@ -1797,7 +1869,8 @@
       const params = new URLSearchParams();
       params.append('date', date);
       files.forEach(f => params.append('files', f));
-      
+
+      setSelectionMode(false);
       window.location.href = `/download_reports?${params.toString()}`;
     });
 
@@ -1815,8 +1888,7 @@
       emptyState.style.display = 'none';
       document.getElementById('backupBannerOffline').style.display = 'none';
       document.getElementById('backupBannerEmpty').style.display = 'none';
-      selectedFiles.clear();
-      updateActionBar();
+      setSelectionMode(false, false);
       
       try {
         const response = await fetch(`/list_reports?date=${date}`);
@@ -1849,10 +1921,8 @@
         
         if (allFiles.length === 0) {
           emptyState.style.display = 'block';
-          document.getElementById('actionBar').style.display = 'none';
         } else {
           filterAndRenderFiles();
-          document.getElementById('actionBar').style.display = 'block';
         }
         
       } catch (error) {
@@ -1938,7 +2008,7 @@
       card.className = 'card file-card h-100';
       card.style.position = 'relative';
       const filePath = file.rel_path || file.name;
-      if (selectedFiles.has(filePath)) card.classList.add('selected');
+      if (selectionMode && selectedFiles.has(filePath)) card.classList.add('selected');
       
       const fileExt = file.name.split('.').pop().toLowerCase();
       const iconClass = fileExt === 'xlsx' || fileExt === 'xls' ? 'bi-file-earmark-excel' : 
@@ -1995,6 +2065,7 @@
       // Checkbox toggle
       const checkbox = card.querySelector('.file-checkbox');
       checkbox.addEventListener('change', function(e) {
+        if (!selectionMode) return;
         const filePathValue = this.dataset.filepath || file.name;
         if (this.checked) {
           selectedFiles.add(filePathValue);
@@ -2012,6 +2083,7 @@
       
       // Card click toggles checkbox
       card.addEventListener('click', function(e) {
+        if (!selectionMode) return;
         if (!e.target.classList.contains('download-single') && 
             !e.target.classList.contains('star-btn') &&
             !e.target.classList.contains('file-checkbox') &&
@@ -2062,14 +2134,9 @@
       }
     }
 
-    function filterFiles(query) {
-      const filtered = allFiles.filter(f => f.name.toLowerCase().includes(query));
-      renderFiles(filtered);
-    }
-
     function updateActionBar() {
       const count = selectedFiles.size;
-      document.getElementById('selectedCount').textContent = `${count} dipilih`;
+      document.getElementById('selectedCount').textContent = `${count.toLocaleString('id-ID')} report dipilih`;
       document.getElementById('downloadSelectedBtn').disabled = count === 0;
     }
 

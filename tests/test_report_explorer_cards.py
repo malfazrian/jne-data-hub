@@ -66,3 +66,15 @@ def test_industry_filter_is_single_row_before_reports_finish_loading():
     init_position = source.index("renderTagSelect([])")
     load_position = source.index("await loadFiles()")
     assert init_position < load_position
+
+
+def test_bulk_controls_use_explicit_selection_mode():
+    source = TEMPLATE.read_text(encoding="utf-8")
+
+    assert 'id="selectionModeBtn"' in source
+    assert 'id="cancelSelectionBtn"' in source
+    assert "let selectionMode = false" in source
+    assert "function setSelectionMode(enabled" in source
+    assert "selection-mode-active" in source
+    assert "if (!selectionMode) return;" in source
+    assert ".file-checkbox" in source
