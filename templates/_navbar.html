@@ -1,0 +1,116 @@
+{% set current_path = request.path %}
+{% set hub_active = current_path.startswith('/hub') %}
+{% set master_active = current_path in ['/', '/full', '/report'] %}
+{% set explorer_active = current_path.startswith('/report_explorer') %}
+{% set apex_active = current_path.startswith('/apex_') %}
+{% set pickup_active = current_path.startswith('/pickup-uploader') %}
+{% set dwr_active = current_path.startswith('/dwr-uploader') %}
+
+<nav class="navbar navbar-expand-lg fixed-top">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+      <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}"
+           alt="JNE Logo" width="50" height="50"
+           class="me-2 d-inline-block align-middle">
+      CCC DS Data Hub
+    </a>
+
+    <button class="navbar-toggler bg-light" type="button"
+            data-bs-toggle="collapse" data-bs-target="#sharedNavbar"
+            aria-controls="sharedNavbar" aria-expanded="false"
+            aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="sharedNavbar">
+      <ul class="navbar-nav ms-auto gap-lg-1">
+        <li class="nav-item dropdown">
+          <a data-nav-group="Hub"
+             class="btn btn-sm dropdown-toggle {{ 'btn-active' if hub_active else 'btn-outline-light' }}"
+             href="#" id="navHub" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-chat-square-text-fill me-1"></i>Hub
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navHub">
+            <li><a data-nav-item="Hub" href="/hub"
+                   class="dropdown-item {{ 'active' if hub_active else '' }}"
+                   {% if hub_active %}aria-current="page"{% endif %}>Hub</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown">
+          <a data-nav-group="Master Data DS"
+             class="btn btn-sm dropdown-toggle {{ 'btn-active' if master_active else 'btn-outline-light' }}"
+             href="#" id="navMaster" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-database-fill me-1"></i>Master Data DS
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navMaster">
+            <li><a data-nav-item="Performance" href="/"
+                   class="dropdown-item {{ 'active' if current_path == '/' else '' }}"
+                   {% if current_path == '/' %}aria-current="page"{% endif %}>Performance</a></li>
+            <li><a data-nav-item="Full Data" href="/full"
+                   class="dropdown-item {{ 'active' if current_path == '/full' else '' }}"
+                   {% if current_path == '/full' %}aria-current="page"{% endif %}>Full Data</a></li>
+            <li><a data-nav-item="Report" href="/report"
+                   class="dropdown-item {{ 'active' if current_path == '/report' else '' }}"
+                   {% if current_path == '/report' %}aria-current="page"{% endif %}>Report</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown">
+          <a data-nav-group="Report Explorer"
+             class="btn btn-sm dropdown-toggle {{ 'btn-active' if explorer_active else 'btn-outline-light' }}"
+             href="#" id="navExplorer" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-folder2-open me-1"></i>Report Explorer
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navExplorer">
+            <li><a data-nav-item="Report Explorer" href="/report_explorer"
+                   class="dropdown-item {{ 'active' if explorer_active else '' }}"
+                   {% if explorer_active %}aria-current="page"{% endif %}>Report Explorer</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown">
+          <a data-nav-group="APEX"
+             class="btn btn-sm dropdown-toggle {{ 'btn-active' if apex_active else 'btn-outline-light' }}"
+             href="#" id="navApex" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-arrow-down-up me-1"></i>APEX
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navApex">
+            <li><a data-nav-item="Apex Uploader" href="/apex_uploader"
+                   class="dropdown-item {{ 'active' if current_path.startswith('/apex_uploader') else '' }}"
+                   {% if current_path.startswith('/apex_uploader') %}aria-current="page"{% endif %}>Apex Uploader</a></li>
+            <li><a data-nav-item="Apex Requester" href="/apex_requester"
+                   class="dropdown-item {{ 'active' if current_path.startswith('/apex_requester') else '' }}"
+                   {% if current_path.startswith('/apex_requester') %}aria-current="page"{% endif %}>Apex Requester</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown">
+          <a data-nav-group="Pickup"
+             class="btn btn-sm dropdown-toggle {{ 'btn-active' if pickup_active else 'btn-outline-light' }}"
+             href="#" id="navPickup" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-box-seam-fill me-1"></i>Pickup
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navPickup">
+            <li><a data-nav-item="Pickup Uploader" href="/pickup-uploader"
+                   class="dropdown-item {{ 'active' if pickup_active else '' }}"
+                   {% if pickup_active %}aria-current="page"{% endif %}>Pickup Uploader</a></li>
+          </ul>
+        </li>
+
+        <li class="nav-item dropdown">
+          <a data-nav-group="DWR"
+             class="btn btn-sm dropdown-toggle {{ 'btn-active' if dwr_active else 'btn-outline-light' }}"
+             href="#" id="navDwr" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-rulers me-1"></i>DWR
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navDwr">
+            <li><a data-nav-item="DWR Uploader" href="/dwr-uploader"
+                   class="dropdown-item {{ 'active' if dwr_active else '' }}"
+                   {% if dwr_active %}aria-current="page"{% endif %}>DWR Uploader</a></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
