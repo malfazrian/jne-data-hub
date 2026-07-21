@@ -255,6 +255,32 @@
       color: #fff;
     }
 
+    .report-render-controls {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1.25rem;
+      color: #68758a;
+      font-size: .82rem;
+    }
+
+    .load-more-reports {
+      border-color: #bfd7f5;
+      border-radius: 9px;
+      background: #fff;
+      color: #075bb6;
+      font-weight: 600;
+      padding: .45rem .9rem;
+    }
+
+    .load-more-reports:hover,
+    .load-more-reports:focus {
+      border-color: #1671d9;
+      background: #eff6ff;
+      color: #075bb6;
+    }
+
     .file-card .star-btn.active {
       animation: pop .25s ease;
     }
@@ -643,6 +669,13 @@
 
       <div id="fileList" class="row g-3"></div>
 
+      <div id="reportRenderControls" class="report-render-controls" aria-live="polite">
+        <span id="reportRenderCount"></span>
+        <button type="button" id="loadMoreReportsBtn" class="btn btn-sm load-more-reports">
+          <i class="bi bi-plus-circle me-1"></i>Muat report berikutnya
+        </button>
+      </div>
+
       <!-- Empty State -->
       <div id="emptyState" class="text-center my-5" style="display: none;">
         <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
@@ -1005,6 +1038,11 @@
     let historyStatusRows = [];
     let projectPicRows = [];
     let projectPicLoaded = false;
+    const REPORT_BATCH_SIZE = 60;
+    const SEARCH_DEBOUNCE_MS = 250;
+    let currentFilteredFiles = [];
+    let visibleReportLimit = REPORT_BATCH_SIZE;
+    let searchDebounceTimer = null;
 
     // Load user preferences and files when page loads
     document.addEventListener('DOMContentLoaded', async function() {
@@ -1608,13 +1646,19 @@
 
     // Search functionality
     document.getElementById('searchInput').addEventListener('input', function() {
-      filterAndRenderFiles();
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(filterAndRenderFiles, SEARCH_DEBOUNCE_MS);
+    });
+
+    document.getElementById('loadMoreReportsBtn').addEventListener('click', function() {
+      visibleReportLimit += REPORT_BATCH_SIZE;
+      renderFiles();
     });
 
     // Filter and render files based on current filter and search
     function filterAndRenderFiles() {
       const query = document.getElementById('searchInput').value.toLowerCase();
-      let filtered = allFiles;
+      let filtered = allFiles.slice();
       
       // Apply search filter
       if (query) {
@@ -1651,7 +1695,9 @@
         return b.modified_ts - a.modified_ts;
       });
       
-      renderFiles(filtered);
+      currentFilteredFiles = filtered;
+      visibleReportLimit = REPORT_BATCH_SIZE;
+      renderFiles();
       
       // Toggle section visibility based on filter
       const favTitle = document.getElementById('favoriteSectionTitle');
@@ -1717,16 +1763,18 @@
 
     // Select All
     document.getElementById('selectAllBtn').addEventListener('click', function() {
-      document.querySelectorAll('.file-checkbox').forEach(cb => {
-        if (!cb.checked) cb.click();
+      currentFilteredFiles.forEach(file => {
+        selectedFiles.add(file.rel_path || file.name);
       });
+      renderFiles();
+      updateActionBar();
     });
 
     // Deselect All
     document.getElementById('deselectAllBtn').addEventListener('click', function() {
-      document.querySelectorAll('.file-checkbox').forEach(cb => {
-        if (cb.checked) cb.click();
-      });
+      selectedFiles.clear();
+      renderFiles();
+      updateActionBar();
     });
 
     // Download Selected
@@ -1752,6 +1800,9 @@
       
       loadingIndicator.style.display = 'block';
       fileList.innerHTML = '';
+      currentFilteredFiles = [];
+      visibleReportLimit = REPORT_BATCH_SIZE;
+      updateReportRenderControls();
       emptyState.style.display = 'none';
       document.getElementById('backupBannerOffline').style.display = 'none';
       document.getElementById('backupBannerEmpty').style.display = 'none';
@@ -1795,9 +1846,6 @@
           document.getElementById('actionBar').style.display = 'block';
         }
         
-        // Reload user preferences to check for new favorites and recent downloads
-        await loadUserPreferences();
-        updateRecentDownloads();
       } catch (error) {
         console.error('Error loading files:', error);
         loadingIndicator.style.display = 'none';
@@ -1808,10 +1856,25 @@
       }
     }
 
-    function renderFiles(files) {
+    function updateReportRenderControls() {
+      const controls = document.getElementById('reportRenderControls');
+      const count = document.getElementById('reportRenderCount');
+      const loadMoreBtn = document.getElementById('loadMoreReportsBtn');
+      const total = currentFilteredFiles.length;
+      const rendered = Math.min(visibleReportLimit, total);
+
+      controls.style.display = total > 0 ? 'flex' : 'none';
+      count.textContent = total > 0
+        ? `Menampilkan ${rendered.toLocaleString('id-ID')} dari ${total.toLocaleString('id-ID')} report`
+        : '';
+      loadMoreBtn.style.display = rendered < total ? 'inline-flex' : 'none';
+    }
+
+    function renderFiles() {
       const favoriteList = document.getElementById('favoriteList');
       const fileList = document.getElementById('fileList');
       const favTitle = document.getElementById('favoriteSectionTitle');
+      const files = currentFilteredFiles.slice(0, visibleReportLimit);
       
       favoriteList.innerHTML = '';
       fileList.innerHTML = '';
@@ -1841,16 +1904,21 @@
       }
       
       // Render favorites
+      const favoriteFragment = document.createDocumentFragment();
       favorites.forEach(file => {
         const col = createFileCard(file, favoriteList);
-        favoriteList.appendChild(col);
+        favoriteFragment.appendChild(col);
       });
+      favoriteList.appendChild(favoriteFragment);
       
       // Render non-favorites
+      const fileFragment = document.createDocumentFragment();
       nonFavorites.forEach(file => {
         const col = createFileCard(file, fileList);
-        fileList.appendChild(col);
+        fileFragment.appendChild(col);
       });
+      fileList.appendChild(fileFragment);
+      updateReportRenderControls();
     }
     
     function createFileCard(file, container) {

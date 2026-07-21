@@ -31,3 +31,29 @@ def test_report_card_filename_supports_two_lines_and_clear_states():
     assert ".file-card:focus-within" in source
     assert ".file-type-tile" in source
     assert ".file-card-footer" in source
+
+
+def test_report_list_renders_in_progressive_batches():
+    source = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "const REPORT_BATCH_SIZE = 60" in source
+    assert "currentFilteredFiles.slice(0, visibleReportLimit)" in source
+    assert 'id="loadMoreReportsBtn"' in source
+    assert 'id="reportRenderCount"' in source
+    assert "DocumentFragment" in source
+
+
+def test_report_search_is_debounced_and_preferences_load_once():
+    source = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "const SEARCH_DEBOUNCE_MS = 250" in source
+    assert "clearTimeout(searchDebounceTimer)" in source
+    assert "setTimeout(filterAndRenderFiles, SEARCH_DEBOUNCE_MS)" in source
+    assert source.count("await loadUserPreferences()") == 1
+
+
+def test_select_all_still_targets_every_filtered_report():
+    source = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "currentFilteredFiles.forEach(file =>" in source
+    assert "selectedFiles.add(file.rel_path || file.name)" in source
