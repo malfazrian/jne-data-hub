@@ -57,3 +57,12 @@ def test_select_all_still_targets_every_filtered_report():
 
     assert "currentFilteredFiles.forEach(file =>" in source
     assert "selectedFiles.add(file.rel_path || file.name)" in source
+
+
+def test_industry_filter_is_single_row_before_reports_finish_loading():
+    source = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "#tagSelect:not(.tomselected)" in source
+    init_position = source.index("renderTagSelect([])")
+    load_position = source.index("await loadFiles()")
+    assert init_position < load_position
