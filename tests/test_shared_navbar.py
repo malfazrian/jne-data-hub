@@ -7,6 +7,12 @@ from flask import Flask, render_template
 
 TEMPLATE_ROOT = Path(__file__).parents[1] / "templates"
 GROUPS = ["Hub", "Master Data DS", "Report Explorer", "APEX", "Pickup", "DWR"]
+DIRECT_GROUPS = {
+    "Hub": "/hub",
+    "Report Explorer": "/report_explorer",
+    "Pickup": "/pickup-uploader",
+    "DWR": "/dwr-uploader",
+}
 ITEMS = {
     "Hub": "/hub",
     "Performance": "/",
@@ -49,7 +55,24 @@ def test_shared_navbar_has_grouped_destinations_and_collapse(app):
     for item, href in ITEMS.items():
         pattern = rf'<a[^>]*data-nav-item="{re.escape(item)}"[^>]*href="{re.escape(href)}"'
         assert len(re.findall(pattern, html)) == 1
-    assert html.count('data-bs-toggle="dropdown"') == len(GROUPS)
+    assert html.count('data-bs-toggle="dropdown"') == 2
+
+
+def test_single_destination_groups_are_direct_links(app):
+    html = render_nav(app, "/")
+    for group, href in DIRECT_GROUPS.items():
+        tag = re.search(rf'<a[^>]*data-nav-group="{re.escape(group)}"[^>]*>', html).group()
+        assert f'href="{href}"' in tag
+        assert 'dropdown-toggle' not in tag
+        assert 'data-bs-toggle="dropdown"' not in tag
+
+
+def test_navbar_css_has_unambiguous_active_and_dropdown_states():
+    css = (TEMPLATE_ROOT.parents[0] / "static" / "style.css").read_text(encoding="utf-8")
+    assert ".navbar .nav-menu-link.btn-active::before" in css
+    assert ".navbar .dropdown-item:hover" in css
+    assert ".navbar .dropdown-item:focus" in css
+    assert ".navbar .dropdown-item.active" in css
 
 
 @pytest.mark.parametrize(

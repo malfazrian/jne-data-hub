@@ -24,22 +24,17 @@
 
     <div class="collapse navbar-collapse" id="sharedNavbar">
       <ul class="navbar-nav ms-auto gap-lg-1">
-        <li class="nav-item dropdown">
-          <a data-nav-group="Hub"
-             class="btn btn-sm dropdown-toggle {{ 'btn-active' if hub_active else 'btn-outline-light' }}"
-             href="#" id="navHub" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <li class="nav-item">
+          <a data-nav-group="Hub" data-nav-item="Hub"
+             class="btn btn-sm nav-menu-link {{ 'btn-active' if hub_active else 'btn-outline-light' }}"
+             href="/hub" {% if hub_active %}aria-current="page"{% endif %}>
             <i class="bi bi-chat-square-text-fill me-1"></i>Hub
           </a>
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navHub">
-            <li><a data-nav-item="Hub" href="/hub"
-                   class="dropdown-item {{ 'active' if hub_active else '' }}"
-                   {% if hub_active %}aria-current="page"{% endif %}>Hub</a></li>
-          </ul>
         </li>
 
         <li class="nav-item dropdown">
           <a data-nav-group="Master Data DS"
-             class="btn btn-sm dropdown-toggle {{ 'btn-active' if master_active else 'btn-outline-light' }}"
+             class="btn btn-sm nav-menu-link dropdown-toggle {{ 'btn-active' if master_active else 'btn-outline-light' }}"
              href="#" id="navMaster" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-database-fill me-1"></i>Master Data DS
           </a>
@@ -56,22 +51,17 @@
           </ul>
         </li>
 
-        <li class="nav-item dropdown">
-          <a data-nav-group="Report Explorer"
-             class="btn btn-sm dropdown-toggle {{ 'btn-active' if explorer_active else 'btn-outline-light' }}"
-             href="#" id="navExplorer" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <li class="nav-item">
+          <a data-nav-group="Report Explorer" data-nav-item="Report Explorer"
+             class="btn btn-sm nav-menu-link {{ 'btn-active' if explorer_active else 'btn-outline-light' }}"
+             href="/report_explorer" {% if explorer_active %}aria-current="page"{% endif %}>
             <i class="bi bi-folder2-open me-1"></i>Report Explorer
           </a>
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navExplorer">
-            <li><a data-nav-item="Report Explorer" href="/report_explorer"
-                   class="dropdown-item {{ 'active' if explorer_active else '' }}"
-                   {% if explorer_active %}aria-current="page"{% endif %}>Report Explorer</a></li>
-          </ul>
         </li>
 
         <li class="nav-item dropdown">
           <a data-nav-group="APEX"
-             class="btn btn-sm dropdown-toggle {{ 'btn-active' if apex_active else 'btn-outline-light' }}"
+             class="btn btn-sm nav-menu-link dropdown-toggle {{ 'btn-active' if apex_active else 'btn-outline-light' }}"
              href="#" id="navApex" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-arrow-down-up me-1"></i>APEX
           </a>
@@ -85,30 +75,20 @@
           </ul>
         </li>
 
-        <li class="nav-item dropdown">
-          <a data-nav-group="Pickup"
-             class="btn btn-sm dropdown-toggle {{ 'btn-active' if pickup_active else 'btn-outline-light' }}"
-             href="#" id="navPickup" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <li class="nav-item">
+          <a data-nav-group="Pickup" data-nav-item="Pickup Uploader"
+             class="btn btn-sm nav-menu-link {{ 'btn-active' if pickup_active else 'btn-outline-light' }}"
+             href="/pickup-uploader" {% if pickup_active %}aria-current="page"{% endif %}>
             <i class="bi bi-box-seam-fill me-1"></i>Pickup
           </a>
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navPickup">
-            <li><a data-nav-item="Pickup Uploader" href="/pickup-uploader"
-                   class="dropdown-item {{ 'active' if pickup_active else '' }}"
-                   {% if pickup_active %}aria-current="page"{% endif %}>Pickup Uploader</a></li>
-          </ul>
         </li>
 
-        <li class="nav-item dropdown">
-          <a data-nav-group="DWR"
-             class="btn btn-sm dropdown-toggle {{ 'btn-active' if dwr_active else 'btn-outline-light' }}"
-             href="#" id="navDwr" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+        <li class="nav-item">
+          <a data-nav-group="DWR" data-nav-item="DWR Uploader"
+             class="btn btn-sm nav-menu-link {{ 'btn-active' if dwr_active else 'btn-outline-light' }}"
+             href="/dwr-uploader" {% if dwr_active %}aria-current="page"{% endif %}>
             <i class="bi bi-rulers me-1"></i>DWR
           </a>
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navDwr">
-            <li><a data-nav-item="DWR Uploader" href="/dwr-uploader"
-                   class="dropdown-item {{ 'active' if dwr_active else '' }}"
-                   {% if dwr_active %}aria-current="page"{% endif %}>DWR Uploader</a></li>
-          </ul>
         </li>
       </ul>
     </div>

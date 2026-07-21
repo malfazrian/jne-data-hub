@@ -148,6 +148,7 @@ input, button {
 .navbar .btn {
   border: none;
   transition: all 0.2s ease-in-out;
+  text-decoration: none;
 }
 
 .navbar .btn:hover {
@@ -165,7 +166,7 @@ input, button {
   font-weight: 600;
 }
 
-.navbar .btn.btn-active::after {
+.navbar .nav-menu-link.btn-active::before {
   content: "";
   position: absolute;
   bottom: -4px;
@@ -174,6 +175,18 @@ input, button {
   height: 5px;
   background-color: var(--accent-red);
   border-radius: 2px;
+}
+
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus {
+  background-color: var(--primary-blue);
+  color: #fff;
+}
+
+.navbar .dropdown-item.active,
+.navbar .dropdown-item:active {
+  background-color: var(--accent-red);
+  color: #fff;
 }
 
 /* === HEADINGS === */
