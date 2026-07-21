@@ -33,6 +33,10 @@ from routes.shared import (
 report_explorer_bp = Blueprint("report_explorer", __name__)
 
 REPORT_EXPLORER_CACHE_TTL_SECONDS = int(os.getenv("REPORT_EXPLORER_CACHE_TTL_SECONDS", "60"))
+REPORT_EXPLORER_SNAPSHOT_DIR = os.getenv(
+    "REPORT_EXPLORER_SNAPSHOT_DIR",
+    os.path.join(BASE_DIR, "data", "report_explorer_snapshots"),
+)
 STATUS_CACHE_TTL_SECONDS = int(os.getenv("REPORT_EXPLORER_STATUS_CACHE_TTL_SECONDS", "300"))
 REPORT_VIEWER_NOTICE_FILE = os.getenv(
     "REPORT_VIEWER_NOTICE_FILE",
@@ -61,6 +65,8 @@ REPORT_VIEWER_NOTICE_ICONS = {
 
 _cache_lock = threading.Lock()
 _cache_store = {}
+_report_refresh_lock = threading.Lock()
+_report_refreshing = set()
 _manuals_lock = threading.Lock()
 
 
@@ -119,6 +125,111 @@ def _cached_data(key, ttl_seconds, loader):
 
     with _cache_lock:
         _cache_store[key] = (time.time(), data)
+    return data
+
+
+def _report_snapshot_path(date_str):
+    return Path(REPORT_EXPLORER_SNAPSHOT_DIR) / f"{date_str}.json"
+
+
+def _read_report_snapshot(date_str):
+    snapshot_path = _report_snapshot_path(date_str)
+    try:
+        with snapshot_path.open("r", encoding="utf-8") as snapshot_file:
+            payload = json.load(snapshot_file)
+        saved_at = float(payload["saved_at"])
+        data = payload["data"]
+        if not isinstance(data, dict) or not isinstance(data.get("files"), list):
+            return None
+        return saved_at, data
+    except (FileNotFoundError, OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def _write_report_snapshot(date_str, data, saved_at=None):
+    snapshot_path = _report_snapshot_path(date_str)
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = snapshot_path.with_name(
+        f".{snapshot_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    payload = {"saved_at": time.time() if saved_at is None else saved_at, "data": data}
+    try:
+        with temp_path.open("w", encoding="utf-8") as snapshot_file:
+            json.dump(payload, snapshot_file, ensure_ascii=False, separators=(",", ":"))
+            snapshot_file.flush()
+            os.fsync(snapshot_file.fileno())
+        os.replace(temp_path, snapshot_path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+
+
+def _remember_report_snapshot(date_str, saved_at, data):
+    with _cache_lock:
+        _cache_store[("list_reports", date_str)] = (saved_at, data)
+
+
+def _refresh_report_snapshot(app, date_obj, date_str):
+    try:
+        with app.app_context():
+            data = _load_list_reports_data(date_obj, date_str)
+            saved_at = time.time()
+            _write_report_snapshot(date_str, data, saved_at=saved_at)
+            _remember_report_snapshot(date_str, saved_at, data)
+            app.logger.info(
+                "[report_explorer] Refreshed report snapshot for %s (%s files)",
+                date_str,
+                len(data.get("files", [])),
+            )
+    except Exception:
+        app.logger.exception("[report_explorer] Failed refreshing report snapshot for %s", date_str)
+    finally:
+        with _report_refresh_lock:
+            _report_refreshing.discard(date_str)
+
+
+def _start_report_snapshot_refresh(date_obj, date_str):
+    with _report_refresh_lock:
+        if date_str in _report_refreshing:
+            return False
+        _report_refreshing.add(date_str)
+
+    try:
+        app = current_app._get_current_object()
+        refresh_thread = threading.Thread(
+            target=_refresh_report_snapshot,
+            args=(app, date_obj, date_str),
+            name=f"report-snapshot-{date_str}",
+            daemon=True,
+        )
+        refresh_thread.start()
+    except Exception:
+        with _report_refresh_lock:
+            _report_refreshing.discard(date_str)
+        raise
+    return True
+
+
+def _get_list_reports_swr(date_obj, date_str):
+    cache_key = ("list_reports", date_str)
+    with _cache_lock:
+        cached = _cache_store.get(cache_key)
+
+    if cached is None:
+        cached = _read_report_snapshot(date_str)
+        if cached is not None:
+            _remember_report_snapshot(date_str, cached[0], cached[1])
+
+    if cached is not None:
+        saved_at, data = cached
+        if time.time() - saved_at > REPORT_EXPLORER_CACHE_TTL_SECONDS:
+            _start_report_snapshot_refresh(date_obj, date_str)
+        return data
+
+    data = _load_list_reports_data(date_obj, date_str)
+    saved_at = time.time()
+    _write_report_snapshot(date_str, data, saved_at=saved_at)
+    _remember_report_snapshot(date_str, saved_at, data)
     return data
 
 
@@ -855,11 +966,7 @@ def list_reports():
 
     try:
         date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-        data = _cached_data(
-            ("list_reports", date_obj.date().isoformat()),
-            REPORT_EXPLORER_CACHE_TTL_SECONDS,
-            lambda: _load_list_reports_data(date_obj, date_str),
-        )
+        data = _get_list_reports_swr(date_obj, date_obj.date().isoformat())
         return jsonify(data)
 
     except Exception as e:
