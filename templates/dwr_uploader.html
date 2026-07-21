@@ -13,7 +13,11 @@
 
   <main>
     <div class="container mt-3" style="max-width:min(90%,720px);">
-      <h1 class="mb-3">DWR Uploader</h1>
+      <div class="page-title-with-status mb-3">
+        <h1 class="mb-0">DWR Uploader</h1>
+        {% set freshness_source = "dwr" %}
+        {% include "_data_freshness.html" %}
+      </div>
       <p class="text-muted mb-4">Upload CSV atau Excel berisi AWB/connote, lalu unduh seluruh data DWR yang match.</p>
       <form id="dwrForm" enctype="multipart/form-data">
         <div class="mb-3">

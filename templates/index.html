@@ -27,15 +27,19 @@
   <main>
     <div class="container mt-3">
       <!-- === PAGE TITLE === -->
-      <h1 class="mb-4">
-        {% if mode == 'full' %}
-          <i class="bi bi-stack me-2"></i> Full Data Extractor
-        {% elif mode == 'report' %}
-          <i class="bi bi-file-earmark-text me-2"></i> Report Data Extractor
-        {% else %}
-          <i class="bi bi-bar-chart-fill me-2"></i> Performance Data Extractor
-        {% endif %}
-      </h1>
+      <div class="page-title-with-status mb-4">
+        <h1 class="mb-0">
+          {% if mode == 'full' %}
+            <i class="bi bi-stack me-2"></i> Full Data Extractor
+          {% elif mode == 'report' %}
+            <i class="bi bi-file-earmark-text me-2"></i> Report Data Extractor
+          {% else %}
+            <i class="bi bi-bar-chart-fill me-2"></i> Performance Data Extractor
+          {% endif %}
+        </h1>
+        {% set freshness_source = "master" %}
+        {% include "_data_freshness.html" %}
+      </div>
 
       <p class="text-muted mb-4">
         {% if mode == 'full' %}

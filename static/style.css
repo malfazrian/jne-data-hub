@@ -422,3 +422,75 @@ a:hover {
   color: #fff;
   box-shadow: 0 4px 10px rgba(0, 45, 114, 0.3);
 }
+
+.page-title-with-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .65rem 1rem;
+}
+
+.data-freshness-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  width: fit-content;
+  padding: .3rem .65rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #526077;
+  font-size: .75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.data-freshness-dot {
+  width: .48rem;
+  height: .48rem;
+  border-radius: 50%;
+  background: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, .16);
+}
+
+.data-freshness-chip.is-fresh {
+  border-color: #bbebce;
+  background: #f0fdf4;
+  color: #18723b;
+}
+
+.data-freshness-chip.is-fresh .data-freshness-dot {
+  background: #22a559;
+  box-shadow: 0 0 0 3px rgba(34, 165, 89, .15);
+}
+
+.data-freshness-chip.is-warning {
+  border-color: #f5daa0;
+  background: #fffbeb;
+  color: #8a5a08;
+}
+
+.data-freshness-chip.is-warning .data-freshness-dot {
+  background: #e7a817;
+  box-shadow: 0 0 0 3px rgba(231, 168, 23, .16);
+}
+
+.data-freshness-chip.is-stale {
+  border-color: #f3b9b9;
+  background: #fff5f5;
+  color: #a32626;
+}
+
+.data-freshness-chip.is-stale .data-freshness-dot {
+  background: #d63b3b;
+  box-shadow: 0 0 0 3px rgba(214, 59, 59, .15);
+}
+
+.data-freshness-chip.is-loading .data-freshness-dot {
+  animation: freshness-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes freshness-pulse {
+  50% { opacity: .4; }
+}

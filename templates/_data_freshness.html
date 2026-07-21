@@ -1,0 +1,8 @@
+<span class="data-freshness-chip is-loading"
+      data-freshness-source="{{ freshness_source }}"
+      role="status" aria-live="polite"
+      title="Memuat status pembaruan data">
+  <span class="data-freshness-dot" aria-hidden="true"></span>
+  <span class="data-freshness-text">Memuat status...</span>
+</span>
+<script defer src="{{ url_for('static', filename='data_freshness.js') }}"></script>

@@ -51,6 +51,7 @@ from routes.apex_uploader  import apex_uploader_bp
 from routes.apex_requester import apex_requester_bp
 from routes.pickup_uploader import pickup_uploader_bp
 from routes.dwr_uploader import dwr_uploader_bp
+from routes.data_freshness import data_freshness_bp
 from routes.thread_routes  import thread_bp
 
 app.register_blueprint(performance_bp)
@@ -59,6 +60,7 @@ app.register_blueprint(apex_uploader_bp)
 app.register_blueprint(apex_requester_bp)
 app.register_blueprint(pickup_uploader_bp)
 app.register_blueprint(dwr_uploader_bp)
+app.register_blueprint(data_freshness_bp)
 app.register_blueprint(thread_bp)
 
 

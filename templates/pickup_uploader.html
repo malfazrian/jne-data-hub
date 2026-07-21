@@ -14,7 +14,11 @@
 
   <main>
   <div class="container mt-3" style="max-width: min(90%, 720px);">
-    <h1 class="mb-3">Pickup Uploader</h1>
+    <div class="page-title-with-status mb-3">
+      <h1 class="mb-0">Pickup Uploader</h1>
+      {% set freshness_source = "pickup" %}
+      {% include "_data_freshness.html" %}
+    </div>
     <p class="text-muted mb-4">
         Upload CSV atau Excel untuk lookup AWB ke database pickup dan unduh hasilnya.
     </p>
