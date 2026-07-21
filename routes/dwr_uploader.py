@@ -12,7 +12,8 @@ import uuid
 import duckdb
 import pandas as pd
 import pyarrow.parquet as pq
-from flask import Blueprint
+from flask import Blueprint, jsonify, render_template, request, send_file
+from werkzeug.utils import secure_filename
 
 
 dwr_uploader_bp = Blueprint("dwr_uploader", __name__)
@@ -243,3 +244,91 @@ def _write_result_csv(columns: list[str], rows: list[tuple]) -> tuple[str, Path]
         writer.writerow(columns)
         writer.writerows([[_format_csv_value(value) for value in row] for row in rows])
     return filename, path
+
+
+def _remove_file_with_retry(path: Path, attempts=5, delay_seconds=0.25) -> None:
+    for attempt in range(attempts):
+        try:
+            if path.exists():
+                path.unlink()
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay_seconds)
+
+
+def _cleanup_old_files(directory: Path, max_age_seconds: int) -> None:
+    if not directory.exists():
+        return
+    cutoff = time.time() - max_age_seconds
+    for path in directory.iterdir():
+        if path.is_file() and path.stat().st_mtime < cutoff:
+            try:
+                _remove_file_with_retry(path, attempts=1)
+            except Exception as exc:
+                print(f"[dwr-uploader] cleanup failed for {path.name}: {exc}")
+
+
+@dwr_uploader_bp.route("/dwr-uploader", methods=["GET"])
+def dwr_uploader():
+    return render_template("dwr_uploader.html")
+
+
+@dwr_uploader_bp.route("/dwr-uploader/upload", methods=["POST"])
+def upload_dwr_file():
+    _cleanup_old_files(TEMP_UPLOAD_DIR, TEMP_FILE_MAX_AGE_SECONDS)
+    _cleanup_old_files(TEMP_RESULT_DIR, RESULT_FILE_MAX_AGE_SECONDS)
+    uploaded = request.files.get("dwr_file")
+    if not uploaded or not uploaded.filename:
+        return jsonify({"error": "Pilih file CSV atau Excel terlebih dahulu."}), 400
+    if Path(uploaded.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+        return jsonify({"error": "Format tidak didukung. Gunakan CSV, XLSX, atau XLS."}), 400
+
+    TEMP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    upload_path = TEMP_UPLOAD_DIR / f"{uuid.uuid4().hex}_{secure_filename(uploaded.filename)}"
+    try:
+        uploaded.save(upload_path)
+        connotes = _extract_connotes(upload_path)
+        if not connotes:
+            return jsonify({"error": "Tidak ada AWB atau connote valid yang terbaca."}), 400
+        parquet_root = Path(os.getenv("DWR_PARQUET_DIR", "./dwr_parquet"))
+        index_path = Path(os.getenv("DWR_AWB_INDEX_PATH", "awb_dwr_index.duckdb"))
+        columns, rows, matched = _lookup_dwr_data(connotes, parquet_root, index_path)
+        filename, _ = _write_result_csv(columns, rows)
+        unique_count = len({_normalise_awb(value) for value in connotes if _normalise_awb(value)})
+        return jsonify(
+            {
+                "summary": {
+                    "total_connote_read": len(connotes),
+                    "total_connote_unique": unique_count,
+                    "total_db_match": len(matched),
+                    "total_not_match": len(connotes) - len(matched),
+                },
+                "download_url": f"/dwr-uploader/download/{filename}",
+                "filename": filename,
+            }
+        )
+    except (DwrIndexMissingError, DwrIndexStaleError) as exc:
+        return jsonify({"error": str(exc)}), 503
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        print(f"[dwr-uploader] query failed: {type(exc).__name__}: {exc}")
+        return jsonify({"error": "Query DWR gagal. Hubungi administrator aplikasi."}), 500
+    finally:
+        try:
+            _remove_file_with_retry(upload_path)
+        except Exception as exc:
+            print(f"[dwr-uploader] upload cleanup failed: {exc}")
+
+
+@dwr_uploader_bp.route("/dwr-uploader/download/<path:filename>", methods=["GET"])
+def download_dwr_result(filename):
+    safe_name = secure_filename(filename)
+    if safe_name != filename:
+        return jsonify({"error": "Nama file tidak valid."}), 400
+    result_path = TEMP_RESULT_DIR / safe_name
+    if not result_path.is_file():
+        return jsonify({"error": "File hasil tidak ditemukan atau sudah dibersihkan."}), 404
+    return send_file(result_path, as_attachment=True, download_name=safe_name)

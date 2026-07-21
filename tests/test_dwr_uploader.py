@@ -1,9 +1,11 @@
 import csv
+import io
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 import pytest
+from flask import Flask
 
 from routes import dwr_uploader
 
@@ -117,3 +119,84 @@ def test_result_csv_formats_connote_and_timestamp(tmp_path, monkeypatch):
     assert output[0] == columns
     assert output[1] == ["'0001", "100", "13/06/2026 08:26:00"]
     assert output[2] == ["'missing", "", ""]
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    app = Flask(__name__, template_folder=str(Path(__file__).parents[1] / "templates"))
+    app.register_blueprint(dwr_uploader.dwr_uploader_bp)
+    app.config.update(TESTING=True)
+    monkeypatch.setattr(dwr_uploader, "TEMP_UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(dwr_uploader, "TEMP_RESULT_DIR", tmp_path / "results")
+    return app.test_client()
+
+
+def test_page_and_upload_routes_return_result(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(dwr_uploader, "_extract_connotes", lambda path: ["0001", "missing"])
+    monkeypatch.setattr(
+        dwr_uploader,
+        "_lookup_dwr_data",
+        lambda values, root, index: (
+            ["CONNOTE", "DWR_AMOUNT_AFTER"],
+            [("'0001", 100), ("'missing", None)],
+            {0},
+        ),
+    )
+    result = tmp_path / "results" / "result.csv"
+
+    def fake_write(columns, rows):
+        result.parent.mkdir(parents=True, exist_ok=True)
+        result.write_text("CONNOTE\n'0001\n", encoding="utf-8")
+        return result.name, result
+
+    monkeypatch.setattr(dwr_uploader, "_write_result_csv", fake_write)
+
+    assert client.get("/dwr-uploader").status_code == 200
+    response = client.post(
+        "/dwr-uploader/upload",
+        data={"dwr_file": (io.BytesIO(b"AWB\n0001\n"), "input.csv")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert response.get_json()["summary"] == {
+        "total_connote_read": 2,
+        "total_connote_unique": 2,
+        "total_db_match": 1,
+        "total_not_match": 1,
+    }
+    assert client.get(response.get_json()["download_url"]).status_code == 200
+
+
+def test_upload_validation_and_index_errors(client, monkeypatch):
+    assert client.post("/dwr-uploader/upload", data={}).status_code == 400
+    unsupported = client.post(
+        "/dwr-uploader/upload",
+        data={"dwr_file": (io.BytesIO(b"x"), "input.txt")},
+        content_type="multipart/form-data",
+    )
+    assert unsupported.status_code == 400
+
+    monkeypatch.setattr(dwr_uploader, "_extract_connotes", lambda path: ["0001"])
+    monkeypatch.setattr(
+        dwr_uploader,
+        "_lookup_dwr_data",
+        lambda *args: (_ for _ in ()).throw(dwr_uploader.DwrIndexStaleError("stale")),
+    )
+    stale = client.post(
+        "/dwr-uploader/upload",
+        data={"dwr_file": (io.BytesIO(b"AWB\n0001"), "input.csv")},
+        content_type="multipart/form-data",
+    )
+    assert stale.status_code == 503
+
+
+def test_download_rejects_unsafe_or_missing_filename(client):
+    assert client.get("/dwr-uploader/download/..%2Fsecret.csv").status_code == 400
+    assert client.get("/dwr-uploader/download/missing.csv").status_code == 404
+
+
+def test_pickup_page_links_to_dwr_uploader():
+    template = (Path(__file__).parents[1] / "templates" / "pickup_uploader.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'href="/dwr-uploader"' in template

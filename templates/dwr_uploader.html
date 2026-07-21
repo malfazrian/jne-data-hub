@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>DWR Uploader</title>
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='bars.ico') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="h-100">
+  <nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
+        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}" alt="JNE Logo" width="50" height="50" class="me-2">
+        CCC DS Data Hub
+      </a>
+      <div class="ms-auto d-flex gap-2">
+        <a class="btn btn-sm btn-outline-light" href="/pickup-uploader"><i class="bi bi-cloud-upload me-1"></i>Pickup Uploader</a>
+        <a class="btn btn-sm btn-active" href="/dwr-uploader"><i class="bi bi-search me-1"></i>DWR Uploader</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <div class="container mt-3" style="max-width:min(90%,720px);">
+      <h1 class="mb-3">DWR Uploader</h1>
+      <p class="text-muted mb-4">Upload CSV atau Excel berisi AWB/connote, lalu unduh seluruh data DWR yang match.</p>
+      <form id="dwrForm" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label for="dwrFile">Upload File AWB / Connote</label>
+          <input type="file" name="dwr_file" id="dwrFile" class="form-control" accept=".csv,.xlsx,.xls" required>
+        </div>
+        <button type="submit" id="mainBtn" class="btn btn-primary w-100"><i class="bi bi-play-fill me-1"></i>Mulai Proses</button>
+      </form>
+      <div class="mt-4" id="progressSection" style="display:none;">
+        <div class="progress mb-3"><div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:35%">35%</div></div>
+        <pre id="progressLog" class="bg-dark text-white p-3 rounded" style="height:150px;overflow:auto;"></pre>
+      </div>
+      <div id="messageBox" class="alert mt-4" style="display:none;"></div>
+      <div id="summarySection" class="mt-4" style="display:none;">
+        <div class="card shadow-sm border-0"><div class="card-body">
+          <h2 class="h5 mb-3">Summary</h2>
+          <div class="row g-3">
+            <div class="col-6"><div class="p-3 bg-light rounded"><div class="text-muted small">Connote terbaca</div><div class="fs-4 fw-bold" id="totalRead">0</div></div></div>
+            <div class="col-6"><div class="p-3 bg-light rounded"><div class="text-muted small">Connote unique</div><div class="fs-4 fw-bold" id="totalUnique">0</div></div></div>
+            <div class="col-6"><div class="p-3 bg-light rounded"><div class="text-muted small">Match DWR</div><div class="fs-4 fw-bold" id="totalMatch">0</div></div></div>
+            <div class="col-6"><div class="p-3 bg-light rounded"><div class="text-muted small">Tidak match</div><div class="fs-4 fw-bold" id="totalNotMatch">0</div></div></div>
+          </div>
+          <a id="downloadBtn" class="btn btn-success w-100 mt-4" href="#" style="display:none;"><i class="bi bi-download me-1"></i>Download Result CSV</a>
+        </div></div>
+      </div>
+    </div>
+  </main>
+  <footer><small>&copy; <span id="year"></span> CCC Data Support. All rights reserved.</small></footer>
+
+<script>
+document.getElementById("year").textContent = new Date().getFullYear();
+const form = document.getElementById("dwrForm"), fileInput = document.getElementById("dwrFile"), mainBtn = document.getElementById("mainBtn");
+const progressSection = document.getElementById("progressSection"), progressBar = document.getElementById("progressBar"), progressLog = document.getElementById("progressLog");
+const messageBox = document.getElementById("messageBox"), summarySection = document.getElementById("summarySection"), downloadBtn = document.getElementById("downloadBtn");
+function message(text,type){messageBox.textContent=text;messageBox.className=`alert alert-${type} mt-4`;messageBox.style.display="block";}
+form.addEventListener("submit", async event => {
+  event.preventDefault(); messageBox.style.display="none"; summarySection.style.display="none";
+  if(!fileInput.files.length){message("Pilih file terlebih dahulu.","warning");return;}
+  mainBtn.disabled=true; fileInput.disabled=true; progressSection.style.display="block"; progressLog.textContent="Mengupload dan membaca connote...\nQuery index DWR...\n";
+  try {
+    const response=await fetch("/dwr-uploader/upload",{method:"POST",body:new FormData(form)}); const data=await response.json();
+    if(!response.ok) throw new Error(data.error||"Proses gagal.");
+    progressBar.style.width="100%"; progressBar.textContent="100%"; progressBar.classList.add("bg-success");
+    document.getElementById("totalRead").textContent=data.summary.total_connote_read;
+    document.getElementById("totalUnique").textContent=data.summary.total_connote_unique;
+    document.getElementById("totalMatch").textContent=data.summary.total_db_match;
+    document.getElementById("totalNotMatch").textContent=data.summary.total_not_match;
+    downloadBtn.href=data.download_url; downloadBtn.style.display="block"; summarySection.style.display="block"; message("Proses selesai.","success");
+  } catch(error) { message(error.message||"Proses gagal.","danger"); progressLog.textContent+=`Error: ${error.message}\n`; }
+  finally { mainBtn.disabled=false; fileInput.disabled=false; }
+});
+</script>
+</body>
+</html>
