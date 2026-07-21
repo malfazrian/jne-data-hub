@@ -63,9 +63,10 @@ function message(text,type){messageBox.textContent=text;messageBox.className=`al
 form.addEventListener("submit", async event => {
   event.preventDefault(); messageBox.style.display="none"; summarySection.style.display="none";
   if(!fileInput.files.length){message("Pilih file terlebih dahulu.","warning");return;}
+  const formData = new FormData(form);
   mainBtn.disabled=true; fileInput.disabled=true; progressSection.style.display="block"; progressLog.textContent="Mengupload dan membaca connote...\nQuery index DWR...\n";
   try {
-    const response=await fetch("/dwr-uploader/upload",{method:"POST",body:new FormData(form)}); const data=await response.json();
+    const response=await fetch("/dwr-uploader/upload",{method:"POST",body:formData}); const data=await response.json();
     if(!response.ok) throw new Error(data.error||"Proses gagal.");
     progressBar.style.width="100%"; progressBar.textContent="100%"; progressBar.classList.add("bg-success");
     document.getElementById("totalRead").textContent=data.summary.total_connote_read;

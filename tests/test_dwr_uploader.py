@@ -200,3 +200,12 @@ def test_pickup_page_links_to_dwr_uploader():
         encoding="utf-8"
     )
     assert 'href="/dwr-uploader"' in template
+
+
+def test_dwr_page_captures_form_data_before_disabling_file_input():
+    template = (Path(__file__).parents[1] / "templates" / "dwr_uploader.html").read_text(
+        encoding="utf-8"
+    )
+    form_data_position = template.index("new FormData(form)")
+    disabled_position = template.index("fileInput.disabled=true")
+    assert form_data_position < disabled_position
