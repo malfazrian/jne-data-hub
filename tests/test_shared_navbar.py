@@ -70,6 +70,7 @@ def test_single_destination_groups_are_direct_links(app):
 def test_navbar_css_has_unambiguous_active_and_dropdown_states():
     css = (TEMPLATE_ROOT.parents[0] / "static" / "style.css").read_text(encoding="utf-8")
     assert ".navbar .nav-menu-link.btn-active::before" in css
+    assert ".navbar .dropdown-toggle.show" in css
     assert ".navbar .dropdown-item:hover" in css
     assert ".navbar .dropdown-item:focus" in css
     assert ".navbar .dropdown-item.active" in css
