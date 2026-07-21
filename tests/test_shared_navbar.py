@@ -18,6 +18,16 @@ ITEMS = {
     "Pickup Uploader": "/pickup-uploader",
     "DWR Uploader": "/dwr-uploader",
 }
+PAGE_TEMPLATES = [
+    "index.html",
+    "report_viewer.html",
+    "apex_uploader.html",
+    "apex_requester.html",
+    "pickup_uploader.html",
+    "dwr_uploader.html",
+    "threads.html",
+    "thread_detail.html",
+]
 
 
 @pytest.fixture
@@ -68,3 +78,20 @@ def test_report_does_not_activate_report_explorer(app):
     html = render_nav(app, "/report")
     tag = re.search(r'<a[^>]*data-nav-group="Report Explorer"[^>]*>', html).group()
     assert "btn-active" not in tag
+
+
+def test_pages_include_only_shared_navbar():
+    include = '{% include "_navbar.html" %}'
+    for name in PAGE_TEMPLATES:
+        source = (TEMPLATE_ROOT / name).read_text(encoding="utf-8")
+        assert source.count(include) == 1, name
+        assert "<nav" not in source, name
+        assert "</nav>" not in source, name
+
+
+def test_shared_navbar_owns_single_bootstrap_bundle_dependency():
+    navbar = (TEMPLATE_ROOT / "_navbar.html").read_text(encoding="utf-8")
+    assert navbar.count("bootstrap.bundle.min.js") == 1
+    for name in PAGE_TEMPLATES:
+        source = (TEMPLATE_ROOT / name).read_text(encoding="utf-8")
+        assert "bootstrap.bundle.min.js" not in source, name

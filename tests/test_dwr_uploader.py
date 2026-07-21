@@ -199,7 +199,11 @@ def test_pickup_page_links_to_dwr_uploader():
     template = (Path(__file__).parents[1] / "templates" / "pickup_uploader.html").read_text(
         encoding="utf-8"
     )
-    assert 'href="/dwr-uploader"' in template
+    navbar = (Path(__file__).parents[1] / "templates" / "_navbar.html").read_text(
+        encoding="utf-8"
+    )
+    assert '{% include "_navbar.html" %}' in template
+    assert 'href="/dwr-uploader"' in navbar
 
 
 def test_dwr_page_captures_form_data_before_disabling_file_input():

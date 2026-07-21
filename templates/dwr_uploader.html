@@ -9,18 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="h-100">
-  <nav class="navbar navbar-expand-lg fixed-top">
-    <div class="container-fluid">
-      <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="/">
-        <img src="{{ url_for('static', filename='images/New_Logo_JNE.png') }}" alt="JNE Logo" width="50" height="50" class="me-2">
-        CCC DS Data Hub
-      </a>
-      <div class="ms-auto d-flex gap-2">
-        <a class="btn btn-sm btn-outline-light" href="/pickup-uploader"><i class="bi bi-cloud-upload me-1"></i>Pickup Uploader</a>
-        <a class="btn btn-sm btn-active" href="/dwr-uploader"><i class="bi bi-search me-1"></i>DWR Uploader</a>
-      </div>
-    </div>
-  </nav>
+  {% include "_navbar.html" %}
 
   <main>
     <div class="container mt-3" style="max-width:min(90%,720px);">
