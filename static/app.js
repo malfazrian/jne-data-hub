@@ -369,15 +369,7 @@ async function checkAndResumeJob(reqId) {
 
     if (data.done) {
       // ✅ Kalau proses sebelumnya sudah selesai
-      $notifArea.html(
-        `<div class="alert alert-success">
-          Proses sebelumnya telah selesai. Silakan download hasilnya.
-        </div>`
-      );
-      $downloadBtn.show();
-      $runBtn.prop('disabled', false).text('Run');
-      bar.style.width = "100%";
-      bar.innerText = "100%";
+      renderCompletedJob(data);
     } else {
       // 🔄 Kalau masih berjalan, lanjutkan progress
       $notifArea.html(
@@ -401,6 +393,38 @@ async function checkAndResumeJob(reqId) {
     );
     $runBtn.prop('disabled', false).text('Run');
   }
+}
+
+async function renderCompletedJob(statusData = null) {
+  let data = statusData;
+  if (!data) {
+    const response = await fetch(`/progress_status/${lastRequestId}`);
+    data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Gagal mengambil status hasil proses.");
+    }
+  }
+
+  $runBtn.prop('disabled', projectList.length === 0).text('Run');
+  bar.style.width = "100%";
+  bar.innerText = "100%";
+
+  if (data.error) {
+    $downloadBtn.hide();
+    $notifArea.html(`<div class="alert alert-danger">${data.message || data.error}</div>`);
+    return;
+  }
+
+  if (data.empty) {
+    $downloadBtn.hide();
+    $notifArea.html(
+      `<div class="alert alert-warning">${data.message || "Proses selesai, tetapi tidak ada data untuk project dan periode yang dipilih."}</div>`
+    );
+    return;
+  }
+
+  $downloadBtn.show();
+  $notifArea.html(`<div class="alert alert-success">Proses selesai, file siap di-download.</div>`);
 }
 
 function getActiveDataSource() {
@@ -742,7 +766,7 @@ $('#save_import_project_btn').on('click', async () => {
   $('#import_project_textarea').val('');
 });
 
-function startProgress(requestId) {
+function startProgress(requestId, isResume = false) {
   const evtSource = new EventSource(`/progress/${requestId}`);
   evtSource.onmessage = function(e) {
     const percent = parseInt(e.data);
@@ -753,9 +777,11 @@ function startProgress(requestId) {
     // Progress bar update real-time
     if (percent >= 100) {
       evtSource.close();
-      $downloadBtn.show();
-      $runBtn.prop('disabled', projectList.length === 0).text('Run').hide();
-      $notifArea.html(`<div class="alert alert-success">Proses selesai, file siap di-download.</div>`);
+      renderCompletedJob().catch((error) => {
+        $downloadBtn.hide();
+        $runBtn.prop('disabled', projectList.length === 0).text('Run');
+        $notifArea.html(`<div class="alert alert-danger">${error.message}</div>`);
+      });
     } else if (!isResume) {
         localStorage.setItem(STORAGE_KEY_REQ, requestId);
     }

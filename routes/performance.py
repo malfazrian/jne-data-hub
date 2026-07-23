@@ -33,6 +33,21 @@ base_path_parquet = os.getenv("PARQUET_BASE_PATH", "")
 progress_status = {}  # {request_id: {"current": int, "total": int, "files": [...], "done": bool}}
 
 
+def empty_result_status():
+    return {
+        "current": 100,
+        "total": 1,
+        "files": [],
+        "done": True,
+        "empty": True,
+        "error": None,
+        "message": (
+            "Proses selesai, tetapi tidak ada data untuk project "
+            "dan periode yang dipilih."
+        ),
+    }
+
+
 # ── Helper functions ──────────────────────────────────────────────────────────
 
 def clean_old_outputs(output_dir, max_age_days=1):
@@ -58,7 +73,7 @@ def validate_progress_status(request_id):
         return None
 
     files = status.get("files", [])
-    if status.get("done") and all(not os.path.exists(f) for f in files):
+    if status.get("done") and files and all(not os.path.exists(f) for f in files):
         progress_status.pop(request_id, None)
         current_app.logger.info(f"Progress {request_id} dihapus karena semua file sudah tidak ada.")
         return None
@@ -70,7 +85,7 @@ def cleanup_old_results():
     expired = []
     for req_id, status in list(progress_status.items()):
         files = status.get("files", [])
-        if all(not os.path.exists(f) for f in files):
+        if files and all(not os.path.exists(f) for f in files):
             expired.append(req_id)
 
     for req_id in expired:
@@ -198,12 +213,7 @@ def start_processing(
 
             if not saved_files:
                 shutil.rmtree(user_archive_dir, ignore_errors=True)
-                progress_status[request_id] = {
-                    "current": 100,
-                    "total":   1,
-                    "files":   [],
-                    "done":    True,
-                }
+                progress_status[request_id] = empty_result_status()
                 return
 
             # Multiple projects → create ZIP now
@@ -222,7 +232,13 @@ def start_processing(
         except Exception as e:
             shutil.rmtree(user_archive_dir, ignore_errors=True)
             progress_status[request_id] = {
-                "current": 1, "total": 1, "files": [], "done": True, "error": str(e),
+                "current": 1,
+                "total": 1,
+                "files": [],
+                "done": True,
+                "empty": False,
+                "error": str(e),
+                "message": f"Proses gagal: {e}",
             }
             print(f"❌ Error background job: {e}")
             print(traceback.format_exc())
@@ -376,4 +392,7 @@ def progress_status_api(request_id):
         "done":    status.get("done", False),
         "percent": percent,
         "files":   status.get("files", []),
+        "empty":   status.get("empty", False),
+        "error":   status.get("error"),
+        "message": status.get("message"),
     })
